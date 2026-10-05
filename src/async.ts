@@ -167,8 +167,12 @@ export type RetryPolicy<E> = {
   readonly attempts: number;
   /** Delay before attempt n (1-based retry index). Use `backoff(...)`. */
   readonly delay: (retry: number) => number;
-  /** Only retry what is actually transient. Defaults to retrying everything. */
-  readonly retriable?: (error: E) => boolean;
+  /**
+   * Only retry what is actually transient. REQUIRED: omitting it is the classic
+   * foot-gun of retrying a validation error five times. Use `() => true` to
+   * state explicitly that every error of this operation is transient.
+   */
+  readonly retriable: (error: E) => boolean;
   readonly sleeper?: Sleeper;
   readonly signal?: AbortSignal;
 };
@@ -186,7 +190,7 @@ export const retry = async <E, A>(
     last = await run(attempt, signal);
     if (last.ok) return last;
     if (attempt === attempts || signal.aborted) break;
-    if (policy.retriable !== undefined && !policy.retriable(last.error)) break;
+    if (!policy.retriable(last.error)) break;
     await sleeper.sleep(policy.delay(attempt), signal);
   }
   return last as Result<E, A>;

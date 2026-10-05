@@ -34,3 +34,6 @@ export * as Async from "./async.ts";
 
 export type { Clock, Sleeper, Random, IdGen } from "./capabilities.ts";
 export * as Cap from "./capabilities.ts";
+
+export * as Lane from "./lanes.ts";
+// `two-track/testing` is a separate entry point (see package.json exports); it is not re-exported here.

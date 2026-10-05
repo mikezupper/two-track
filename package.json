@@ -12,6 +12,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
     }
   },
   "files": [
@@ -32,7 +36,8 @@
     "bench": "node bench/encodings.ts",
     "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm bench:check",
     "example": "node examples/checkout.ts",
-    "bench:check": "node bench/encodings.ts --check"
+    "bench:check": "node bench/encodings.ts --check",
+    "check:tools": "pnpm -r --filter two-track-check check"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

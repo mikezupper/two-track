@@ -44,6 +44,8 @@ const LAYERS: Readonly<Record<string, ReadonlyArray<string>>> = {
   "src/capabilities.ts": [],
   "src/decode.ts": ["src/brand.ts", "src/option.ts", "src/result.ts"],
   "src/async.ts": ["src/result.ts", "src/capabilities.ts"],
+  "src/lanes.ts": ["src/result.ts", "src/tagged.ts", "src/capabilities.ts", "src/async.ts"],
+  "src/testing.ts": ["src/result.ts", "src/option.ts", "src/decode.ts"],
   "src/index.ts": ["*"],
 };
 

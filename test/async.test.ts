@@ -122,7 +122,7 @@ describe("retry", () => {
     expect(await Async.retry(async () => (calls++, err({ retriable: false })), { attempts: 5, delay: () => 1, retriable: (e) => e.retriable, sleeper })).toEqual(err({ retriable: false }));
     expect(calls).toBe(1);
     calls = 0;
-    expect(await Async.retry(() => (calls++, err(`e${calls}`)), { attempts: 3, delay: () => 1, sleeper })).toEqual(err("e3"));
+    expect(await Async.retry(() => (calls++, err(`e${calls}`)), { attempts: 3, delay: () => 1, retriable: () => true, sleeper })).toEqual(err("e3"));
     expect(calls).toBe(3);
     expect(sleeper.calls).toEqual([1, 1]);
   });
@@ -131,7 +131,7 @@ describe("retry", () => {
     const sleeper = Cap.instantSleeper();
     const c = new AbortController();
     let calls = 0;
-    const r = await Async.retry(async () => { calls++; c.abort(); return err("e"); }, { attempts: 5, delay: () => 1, sleeper, signal: c.signal });
+    const r = await Async.retry(async () => { calls++; c.abort(); return err("e"); }, { attempts: 5, delay: () => 1, retriable: () => true, sleeper, signal: c.signal });
     expect(r).toEqual(err("e"));
     expect(calls).toBe(1);
   });
