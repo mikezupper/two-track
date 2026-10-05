@@ -14,6 +14,12 @@ import type { Sleeper } from "./capabilities.ts";
 import { systemSleeper } from "./capabilities.ts";
 import type { NonEmptyArray, Result } from "./result.ts";
 import { err, ok } from "./result.ts";
+import { tagged } from "./tagged.ts";
+
+/** Cancellation outcome of `retry` when a `RetryPolicy.signal` aborts before or between attempts. */
+export const Aborted = tagged("Aborted")();
+export type Aborted = ReturnType<typeof Aborted>;
+const ABORTED: Result<Aborted, never> = err(Aborted({}));
 
 export type AsyncResult<E, A> = Promise<Result<E, A>>;
 
@@ -177,24 +183,45 @@ export type RetryPolicy<E> = {
   readonly signal?: AbortSignal;
 };
 
-/** Retry a fallible async operation under a policy. The last error is returned. */
-export const retry = async <E, A>(
+/**
+ * Retry a fallible async operation under a policy.
+ *
+ * Returns the first `ok`, or the last error once attempts are exhausted or the
+ * error is not retriable. With a `signal`, an abort before the first attempt or
+ * during a backoff wait returns `err(Aborted)` and starts NO further attempt
+ * (regression: an abort during the sleep used to run one more time). An abort
+ * during a run is the run's business: it sees the aborted signal and returns
+ * its own error, which is what you get back.
+ *
+ * The error type only widens to `E | Aborted` when a `signal` is supplied.
+ */
+export function retry<E, A>(
+  run: (attempt: number, signal: AbortSignal) => AsyncResult<E, A> | Result<E, A>,
+  policy: RetryPolicy<E> & { readonly signal: AbortSignal },
+): AsyncResult<E | Aborted, A>;
+export function retry<E, A>(
+  run: (attempt: number, signal: AbortSignal) => AsyncResult<E, A> | Result<E, A>,
+  policy: RetryPolicy<E> & { readonly signal?: undefined },
+): AsyncResult<E, A>;
+export async function retry<E, A>(
   run: (attempt: number, signal: AbortSignal) => AsyncResult<E, A> | Result<E, A>,
   policy: RetryPolicy<E>,
-): AsyncResult<E, A> => {
+): AsyncResult<E | Aborted, A> {
   const sleeper = policy.sleeper ?? systemSleeper;
   const signal = policy.signal ?? new AbortController().signal;
   const attempts = Math.max(1, Math.floor(policy.attempts));
   let last: Result<E, A> | undefined;
   for (let attempt = 1; attempt <= attempts; attempt++) {
+    if (signal.aborted) return ABORTED;
     last = await run(attempt, signal);
     if (last.ok) return last;
     if (attempt === attempts || signal.aborted) break;
     if (!policy.retriable(last.error)) break;
     await sleeper.sleep(policy.delay(attempt), signal);
+    if (signal.aborted) return ABORTED;
   }
   return last as Result<E, A>;
-};
+}
 
 export type BackoffOptions = {
   readonly baseMs: number;

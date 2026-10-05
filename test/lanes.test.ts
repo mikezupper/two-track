@@ -113,7 +113,7 @@ describe("queueLane", () => {
   it("rejects with QueueFull beyond depth and accepts again once the queue drains", async () => {
     const gate = deferred<Result<never, number>>();
     const lane = Lane.queueLane((_signal, n: number) => (n === 1 ? gate.promise : Promise.resolve(ok(n))), { depth: 1 });
-    const p1: AsyncResult<Lane.QueueFull, number> = lane(1);
+    const p1: AsyncResult<Lane.QueueFull | Lane.Busy, number> = lane(1);
     const p2 = lane(2);
     expect(await lane(3)).toEqual(err({ _tag: "QueueFull", depth: 1 }));
     gate.resolve(ok(1));
@@ -122,13 +122,13 @@ describe("queueLane", () => {
     expect(await lane(4)).toEqual(ok(4));
   });
 
-  it("depth 0 still runs a call when idle, and a lane-level abort reaches queued runs through their signal", async () => {
+  it("depth 0 still runs a call when idle; a lane-level abort makes waiting calls resolve Busy promptly and never start", async () => {
     const c = new AbortController();
     const gate = deferred<Result<never, string>>();
-    const signals: boolean[] = [];
+    const started: number[] = [];
     const lane = Lane.queueLane(
       (signal, n: number) => {
-        signals.push(signal.aborted);
+        started.push(n);
         return n === 1 ? gate.promise : Promise.resolve(ok(`r${n}`));
       },
       { depth: 0, signal: c.signal },
@@ -136,18 +136,22 @@ describe("queueLane", () => {
     const p1 = lane(1);
     expect(await lane(2)).toEqual(err({ _tag: "QueueFull", depth: 0 }));
     const lane2 = Lane.queueLane((signal, n: number) => {
-      signals.push(signal.aborted);
+      started.push(n * 10);
       return n === 1 ? gate.promise : Promise.resolve(ok(`q${n}`));
     }, { signal: c.signal });
     const q1 = lane2(1);
     const q2 = lane2(2);
-    await tick(); // q1 has started (live signal); q2 is still queued
+    await tick(); // q1 has started; q2 is still queued
     c.abort();
+    const q3 = lane2(3); // after the abort: rejected immediately
+    expect(await q3).toEqual(err({ _tag: "Busy" }));
     gate.resolve(ok("g"));
     expect(await p1).toEqual(ok("g"));
     expect(await q1).toEqual(ok("g"));
-    expect(await q2).toEqual(ok("q2"));
-    expect(signals).toEqual([false, false, true]);
+    expect(await q2).toEqual(err({ _tag: "Busy" })); // was waiting: never started
+    expect(started).toEqual([1, 10]);
+    const typed: AsyncResult<Lane.QueueFull | Lane.Busy, string> = lane2(4);
+    expect(await typed).toEqual(err({ _tag: "Busy" }));
   });
 });
 

@@ -132,18 +132,23 @@ export const exhaustLane = <Args extends ReadonlyArray<unknown>, E, A>(
 export const queueLane = <Args extends ReadonlyArray<unknown>, E, A>(
   run: Run<Args, E, A>,
   options: LaneOptions & { readonly depth?: number } = {},
-): ((...args: Args) => AsyncResult<E | QueueFull, A>) => {
+): ((...args: Args) => AsyncResult<E | QueueFull | Busy, A>) => {
   const depth = options.depth ?? Number.POSITIVE_INFINITY;
   let tail: Promise<unknown> = Promise.resolve();
   let active = 0;
   let pending = 0;
   return (...args) => {
+    // A lane-level abort rejects new calls and every call still waiting with Busy
+    // (the same meaning as a semaphore waiter aborted before acquiring). The run
+    // in flight, if any, sees the abort through its signal and finishes itself.
+    if (options.signal?.aborted === true) return Promise.resolve(BUSY);
     // When idle, the first pending call is the one about to run, not a waiter.
     const waiting = active > 0 ? pending : Math.max(0, pending - 1);
     if (active + pending > 0 && waiting >= depth) return Promise.resolve(err(QueueFull({ depth })));
     pending++;
-    const next = tail.then(async (): Promise<Result<E | QueueFull, A>> => {
+    const next = tail.then(async (): Promise<Result<E | QueueFull | Busy, A>> => {
       pending--;
+      if (options.signal?.aborted === true) return BUSY;
       active++;
       const { controller, unlink } = linked(options.signal);
       const result = await run(controller.signal, ...args);

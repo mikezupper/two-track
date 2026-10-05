@@ -127,7 +127,40 @@ describe("retry", () => {
     expect(sleeper.calls).toEqual([1, 1]);
   });
 
-  it("stops when the signal is aborted", async () => {
+  it("regression: an abort during the backoff wait starts no further attempt and returns Aborted", async () => {
+    const sleeper = Cap.manualSleeper();
+    const c = new AbortController();
+    let calls = 0;
+    const p = Async.retry(async () => { calls++; return err("transient"); }, { attempts: 5, delay: () => 50, retriable: () => true, sleeper, signal: c.signal });
+    await later(undefined, 0);
+    expect(sleeper.pending()).toEqual([50]); // waiting between attempt 1 and 2
+    c.abort();
+    expect(await p).toEqual(err({ _tag: "Aborted" }));
+    expect(calls).toBe(1);
+    expect(sleeper.pending()).toEqual([]);
+  });
+
+  it("regression: the same with the real systemSleeper", async () => {
+    const c = new AbortController();
+    let calls = 0;
+    const p = Async.retry(async () => { calls++; return err("transient"); }, { attempts: 5, delay: () => 50, retriable: () => true, signal: c.signal });
+    setTimeout(() => c.abort(), 5);
+    expect(await p).toEqual(err({ _tag: "Aborted" }));
+    expect(calls).toBe(1);
+  });
+
+  it("an abort before the first attempt runs nothing; without a signal the type has no Aborted", async () => {
+    const c = new AbortController();
+    c.abort();
+    let calls = 0;
+    const aborted: Result<string | Async.Aborted, number> = await Async.retry(async () => { calls++; return ok(1); }, { attempts: 3, delay: () => 1, retriable: () => true, signal: c.signal });
+    expect(aborted).toEqual(err({ _tag: "Aborted" }));
+    expect(calls).toBe(0);
+    const plain: Result<string, number> = await Async.retry(async (): AsyncResult<string, number> => ok(2), { attempts: 3, delay: () => 1, retriable: () => true });
+    expect(plain).toEqual(ok(2));
+  });
+
+  it("an abort during a run is the run's outcome: its own error comes back", async () => {
     const sleeper = Cap.instantSleeper();
     const c = new AbortController();
     let calls = 0;
