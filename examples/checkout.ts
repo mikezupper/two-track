@@ -14,6 +14,8 @@ type Sku = Infer<typeof Sku>;
 type UserId = Infer<typeof UserId>;
 type Cents = Infer<typeof Cents>;
 type Quantity = Infer<typeof Quantity>;
+/** The one sanctioned re-brand: integer arithmetic on values that were already decoded as Cents. Lives next to the decoder. */
+const cents = (n: number): Cents => Math.max(0, Math.trunc(n)) as Cents;
 
 const CheckoutCommand = D.struct({
   userId: UserId,
@@ -49,10 +51,10 @@ type Deps = { readonly catalog: Catalog; readonly inventory: Inventory; readonly
 
 // ---------- pure core ----------
 const applyCoupon = (total: Cents, coupon: Option<string>): Cents =>
-  O.match(coupon, (c) => (c === "SAVE10" ? (Math.floor(total * 0.9) as Cents) : total), () => total);
+  O.match(coupon, (c) => (c === "SAVE10" ? cents(total * 0.9) : total), () => total);
 
 const sumTotal = (lines: ReadonlyArray<{ readonly qty: Quantity; readonly unitPrice: Cents }>): Cents =>
-  lines.reduce((acc, l) => acc + l.qty * l.unitPrice, 0) as Cents;
+  cents(lines.reduce((acc, l) => acc + l.qty * l.unitPrice, 0));
 
 // ---------- workflow: the railway ----------
 export const checkout = async (deps: Deps, raw: unknown): AsyncResult<CheckoutError, Order> => {
@@ -92,7 +94,7 @@ export const fakeDeps = (stock: Record<string, number>, declineFirst = 0): Deps 
   const prices: Record<string, number> = { "ABC-123": 1999, "XYZ-999": 500 };
   return {
     charges,
-    catalog: { price: async (sku) => ok(O.map(O.fromNullable(prices[sku]), (p) => p as Cents)) },
+    catalog: { price: async (sku) => ok(O.map(O.fromNullable(prices[sku]), cents)) },
     inventory: {
       reserve: async (sku, qty) => {
         const available = stock[sku] ?? 0;
