@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Typecheck (TypeScript 7, all strict flags)
+        run: pnpm typecheck
+      - name: Invariants (architecture + taste, remediation in messages)
+        run: pnpm lint
+      - name: Tests (unit, properties, structural, example) with coverage thresholds
+        run: pnpm vitest run --coverage
+      - name: Build
+        run: pnpm build
+      - name: Benchmark (report only on shared runners; the 4x ratio is enforced locally via pnpm bench:check)
+        run: pnpm bench

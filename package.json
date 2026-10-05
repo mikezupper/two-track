@@ -1,0 +1,44 @@
+{
+  "name": "two-track",
+  "version": "0.1.0",
+  "description": "Zero-dependency railway-oriented programming for TypeScript: Result, Option, decoders, exhaustive match, and async combinators that keep the algebra at compile time.",
+  "license": "MIT",
+  "author": "Mike Zupper",
+  "type": "module",
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
+  "packageManager": "pnpm@10.33.2",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "node scripts/lint-invariants.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "bench": "node bench/encodings.ts",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm bench:check",
+    "example": "node examples/checkout.ts",
+    "bench:check": "node bench/encodings.ts --check"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "@vitest/coverage-v8": "^5.0.3",
+    "fast-check": "^4.10.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
+  }
+}
