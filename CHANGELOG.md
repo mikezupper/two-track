@@ -17,7 +17,7 @@ All notable changes to `two-track` are recorded here. The format follows Keep a 
 ### Changed
 - `Async.retry`: `retriable` is now required (amendment to decision 0005). Write `retriable: () => true` to retry every error explicitly.
 - `Async.retry`: with a `signal`, an abort before an attempt or during a backoff wait returns `err(Aborted)` and starts no further attempt; the error type widens to `E | Aborted` only when a signal is supplied.
-- `Lane.queueLane`: after a lane-level abort, waiting calls resolve `Busy` and never start; the union is `E | QueueFull | Busy`.
+- `Lane.queueLane`: after a lane-level abort, waiting calls resolve `Busy` promptly (without waiting for the run in flight) and never start; the union is `E | QueueFull | Busy`.
 - Packaging: `exports` gained `default` conditions and `./package.json`; declaration files no longer import `.ts` specifiers; `engines.node` is `>=20` for consumers (contributing still needs Node ≥ 22.18 for type stripping); `publishConfig` with provenance and a tag-driven release workflow.
 
 ### Fixed

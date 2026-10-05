@@ -168,7 +168,7 @@ describe("Lane.queueLane (properties)", () => {
   // waiter is chained on the previous run's promise (`tail.then(...)`). Minimized: depth 1, [call, call, abortLane]
   // → the second call is still pending after the abort while run #1 is unsettled. Seed: -1045923396 (path 3:3:8).
   // Expected per the docs ("resolve Busy promptly"): the waiter settles without waiting for the running call.
-  it.skip("strict: waiters resolve Busy promptly after a lane abort, even while a run is in flight", async () => {
+  it("strict: waiters resolve Busy promptly after a lane abort, even while a run is in flight", async () => {
     await fc.assert(fc.asyncProperty(fc.integer({ min: 0, max: 3 }), arbEvents(["call", "ok", "err", "abortLane"], 18), (depth, events) => harness(depth, events, true)), fcParams());
   });
 });

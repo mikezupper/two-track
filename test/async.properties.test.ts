@@ -275,3 +275,60 @@ describe("Async.withTimeout (few, real-timer, order-insensitive)", () => {
     expect(parent.listeners()).toBe(0);
   });
 });
+
+// ---------- the plain promise combinators: the async railway agrees with the sync one ----------
+
+const arbR = (): fc.Arbitrary<Result<string, number>> => fc.oneof(fc.integer().map((n) => ok(n)), fc.string().map((s) => err(s)));
+const eq = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+const lift = <T>(r: T): Promise<T> => Promise.resolve(r);
+
+describe("Async combinators agree with R (properties)", () => {
+  it("map / mapErr / andThen / orElse / match / tap / tapErr: Async.f(lift(r)) == R.f(r) for every r", async () => {
+    const { R } = await import("../src/index.ts");
+    await fc.assert(
+      fc.asyncProperty(arbR(), fc.func(fc.integer()), fc.func(fc.string()), fc.func(arbR()), async (r, f, g, k) => {
+        expect(eq(await Async.map(lift(r), f), R.map(r, f))).toBe(true);
+        expect(eq(await Async.mapErr(lift(r), g), R.mapErr(r, g))).toBe(true);
+        expect(eq(await Async.andThen(lift(r), (a) => lift(k(a))), R.andThen(r, k))).toBe(true);
+        expect(eq(await Async.andThen(r, k), R.andThen(r, k))).toBe(true); // sync input and sync continuation are accepted too
+        expect(eq(await Async.orElse(lift(r), (e) => lift(k(e.length))), R.orElse(r, (e) => k(e.length)))).toBe(true);
+        expect(await Async.match(lift(r), f, (e) => g(e).length)).toBe(R.match(r, f, (e) => g(e).length));
+        const seen: unknown[] = [];
+        expect(eq(await Async.tap(lift(r), (a) => { seen.push(a); }), r)).toBe(true);
+        expect(eq(await Async.tapErr(lift(r), (e) => { seen.push(e); }), r)).toBe(true);
+        expect(seen).toEqual([r.ok ? r.value : r.error]); // exactly one side effect, on the track that was taken
+      }),
+      fcParams(),
+    );
+  });
+
+  it("all(promises) == R.all(results) — first error wins, order preserved, regardless of settlement order", async () => {
+    const { R } = await import("../src/index.ts");
+    await fc.assert(
+      fc.asyncProperty(fc.array(arbR(), { maxLength: 8 }), fc.array(fc.nat({ max: 3 })), async (rs, delays) => {
+        const promises = rs.map((r, i) => new Promise<Result<string, number>>((resolve) => setTimeout(() => resolve(r), delays[i] ?? 0)));
+        expect(eq(await Async.all(promises), R.all(rs))).toBe(true);
+      }),
+      fcParams(),
+    );
+  });
+
+  it("fromPromise / tryPromise never reject, for any thrown or rejected value, sync or async", async () => {
+    await fc.assert(
+      fc.asyncProperty(fc.anything(), fc.boolean(), fc.boolean(), async (thrown, rejects, syncThrow) => {
+        const onReject = (cause: unknown): E => te(typeof cause === "number" ? cause : 0);
+        const p = rejects ? Promise.reject(thrown) : Promise.resolve(thrown);
+        const viaFrom = await Async.fromPromise(p, onReject);
+        expect(viaFrom.ok).toBe(!rejects);
+        const thunk = (): Promise<unknown> => {
+          if (syncThrow) throw thrown; // interop edge: a synchronously throwing thunk is still converted
+          return rejects ? Promise.reject(thrown) : Promise.resolve(thrown);
+        };
+        const viaTry = await Async.tryPromise(thunk, onReject);
+        expect(viaTry.ok).toBe(!rejects && !syncThrow);
+        if (!viaTry.ok) expect(viaTry.error._tag).toBe("T");
+      }),
+      fcParams(),
+    );
+  });
+});

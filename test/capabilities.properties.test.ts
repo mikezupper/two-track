@@ -118,3 +118,30 @@ describe("Cap.instantSleeper (properties)", () => {
     );
   });
 });
+
+// systemClock / systemSleeper / systemRandom / systemIdGen wrap the platform (Date.now, setTimeout, Math.random,
+// crypto.randomUUID). Their behaviour is the platform's; the example tests check the wiring, and the seeded /
+// manual / controlled implementations above are where the properties live. Listed here so the
+// property-test-coverage invariant records the decision rather than being silenced.
+describe("Cap.system* adapters", () => {
+  it("expose the platform without reinterpretation", () => {
+    expect(typeof Cap.systemClock.now()).toBe("number");
+    expect(typeof Cap.systemSleeper.sleep).toBe("function");
+    expect(Cap.systemRandom.next()).toBeLessThan(1);
+    expect(Cap.systemIdGen.next()).toHaveLength(36);
+  });
+});
+
+describe("Cap.sequentialIds (properties)", () => {
+  it("ids are unique, strictly increasing, and carry the prefix, for any prefix and count", () => {
+    fc.assert(
+      fc.property(fc.string({ maxLength: 8 }), fc.integer({ min: 1, max: 200 }), (prefix, n) => {
+        const gen = Cap.sequentialIds(prefix);
+        const ids = Array.from({ length: n }, () => gen.next());
+        expect(new Set(ids).size).toBe(n);
+        expect(ids.every((id, i) => id === `${prefix}${i + 1}`)).toBe(true);
+      }),
+      fcParams(),
+    );
+  });
+});

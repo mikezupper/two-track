@@ -146,9 +146,11 @@ export const queueLane = <Args extends ReadonlyArray<unknown>, E, A>(
     const waiting = active > 0 ? pending : Math.max(0, pending - 1);
     if (active + pending > 0 && waiting >= depth) return Promise.resolve(err(QueueFull({ depth })));
     pending++;
+    let started = false;
     const next = tail.then(async (): Promise<Result<E | QueueFull | Busy, A>> => {
       pending--;
       if (options.signal?.aborted === true) return BUSY;
+      started = true;
       active++;
       const { controller, unlink } = linked(options.signal);
       const result = await run(controller.signal, ...args);
@@ -157,7 +159,23 @@ export const queueLane = <Args extends ReadonlyArray<unknown>, E, A>(
       return result;
     });
     tail = next;
-    return next;
+    const lane = options.signal;
+    if (lane === undefined) return next;
+    // A WAITING call must learn about a lane abort promptly — not once the run ahead of
+    // it happens to finish. Race the queue slot against the abort while the call has not
+    // started; the slot itself still yields BUSY when its turn comes, so nothing starts.
+    // A call whose run already started returns that run's own result. The listener is
+    // removed either way.
+    return new Promise<Result<E | QueueFull | Busy, A>>((resolve) => {
+      const onAbort = (): void => {
+        if (!started) resolve(BUSY);
+      };
+      lane.addEventListener("abort", onAbort, { once: true });
+      void next.then((r) => {
+        lane.removeEventListener("abort", onAbort);
+        resolve(r);
+      });
+    });
   };
 };
 

@@ -18,6 +18,12 @@ Resolve every issue a downstream project reported while building against two-tra
 | P3 | Toolchain requirements overstated: Node ≥ 22.18 and TS 7 are for developing the repo, not for consuming `dist/` | `engines.node` is `>=20`; README states consumer requirements separately from contributor requirements | Same consumer check runs on TS 6 |
 | P4 | Not published to npm | `publishConfig` (public, provenance) and `.github/workflows/release.yml` using npm trusted publishing on `v*` tags; publishing itself needs the one-time trusted-publisher setup on npmjs.com by the owner | Release workflow runs the full check and verifies the tag matches the version |
 
+## Found by the new properties while closing finding 2
+
+| Finding | Resolution | Guard |
+|---|---|---|
+| `queueLane` waiters learned of a lane abort only when the run ahead of them finished (the waiter was chained on `tail.then`), so "resolve Busy promptly" was not true while a run was in flight (minimized: depth 1, `[call, call, abortLane]`; seed −1045923396) | Each waiting call races its queue slot against the lane abort; once its run has started it returns that run's own result; the abort listener is removed either way | Strict property "waiters resolve Busy promptly after a lane abort, even while a run is in flight" in `test/lanes.properties.test.ts` |
+
 ## Decision log
 
 - 2026-10-05 — `retry` gets an explicit `Aborted` outcome rather than returning the last error: callers could not distinguish cancellation from exhaustion. Overloads keep the un-cancellable signature unchanged.
