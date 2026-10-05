@@ -49,6 +49,27 @@ export const ignores = (s: string): void => {
   parse(s); // expect: ignored-result
 };
 
+const inputs: ReadonlyArray<string> = ["a", "", "bc"];
+export const blindSpots = (): void => {
+  inputs.forEach((s) => parse(s)); // expect: ignored-result-in-callback
+  inputs.forEach(parse); // expect: ignored-result-in-callback
+  inputs.map(parse); // expect: ignored-result
+  inputs.map((s) => parse(s)).filter((r) => r.ok); // expect: ignored-result
+  inputs.forEach((s) => { // expect: ignored-result-in-callback
+    return parse(s);
+  });
+};
+export const fineLoops = (): Result<string, number[]> => {
+  const out: number[] = [];
+  for (const s of inputs) {
+    const r = parse(s);
+    if (!r.ok) return r;
+    out.push(r.value);
+  }
+  inputs.forEach((s) => { void parse(s); }); // fine: explicit discard inside the callback
+  return ok(out);
+};
+
 export const hatch = D.unknown; // expect: review-decode-unknown
 export const fallback = (r: Result<string, number>): number => R.unwrapOr(r, 0); // expect: review-unwrap-or
 export const fallbackO = (o: O.Option<number>): number => O.unwrapOr(o, 0); // expect: review-unwrap-or

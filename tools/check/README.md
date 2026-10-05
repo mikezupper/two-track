@@ -28,8 +28,10 @@ two-track-check: 14 file(s), 2 error(s), 1 review item(s), 0 allowed (config: tw
 
 | Rule | Severity | Fires on | Fix |
 |---|---|---|---|
-| `ignored-result` | error | an expression statement (optionally `await`ed) whose value is a `Result` | handle it (`if (!r.ok) return r;`) or `void` it with a reason |
+| `ignored-result` | error | an expression statement (optionally `await`ed) whose value is a `Result`, or an array / promise of Results (`items.map(fallible);`) | handle it (`if (!r.ok) return r;`), `R.traverse`/`R.validateAll` for collections, or `void` it with a reason |
 | `floating-async-result` | error | an un-awaited call whose value is a Promise | `await` and handle, return it, or `void` with a reason |
+| `ignored-result-in-callback` | error | a callback passed where a `void`-returning function is expected (`forEach`, listeners) returns a Result — or a function reference returning one is passed directly | `R.traverse` / `R.validateAll` / `Async.mapConcurrent`, or a `for-of` with early return |
+| `floating-async-callback` | error | an async callback in a `void` context (`forEach(async …)`) — its promise is dropped | `for-of` with `await`, or `Async.mapConcurrent` |
 | `no-throw` | error | `throw` outside a function named `assertNever` | return `err(...)` on the error track |
 | `no-try` | error | `try` | `R.fromThrowable` / `Async.tryPromise` at the interop edge in infra/ |
 | `no-catch` | error | `.catch()` on a promise-typed receiver | `Async.fromPromise` |

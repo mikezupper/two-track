@@ -390,7 +390,7 @@ src/domain/pricing.ts:12:18: [no-platform-calls] Date.now() in domain — fix: t
 src/domain/order.ts:3:1: [layer-domain-imports] domain imports "pg" — fix: domain may import only two-track; drivers belong in infra/
 ```
 
-The type-aware pair, `ignored-result` and `floating-async-result`, is the point of the package: it is TypeScript's missing `#[must_use]`. Banned constructs, layer direction, brand forging, bare `Promise.all`, `fetch` without a signal, and `default:` without `assertNever` round it out, and `R.unwrapOr` / `D.unknown` are reported at `review` severity for a human to confirm. Suppressions require a reason and are counted. See the package README for usage, config and the full rule table.
+The type-aware must-use family — `ignored-result`, `floating-async-result`, `ignored-result-in-callback`, `floating-async-callback` — is the point of the package: it is TypeScript's missing `#[must_use]`, and it covers the cases a grep never could, such as a Result returned from a `forEach` callback or an array of Results produced by `map` and never read. Banned constructs, layer direction, brand forging, bare `Promise.all`, `fetch` without a signal, and `default:` without `assertNever` round it out, and `R.unwrapOr` / `D.unknown` are reported at `review` severity for a human to confirm. Suppressions require a reason and are counted. See the package README for usage, config and the full rule table.
 
 ## Conventions
 

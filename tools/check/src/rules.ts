@@ -67,6 +67,49 @@ const isPromiseType = (checker: ts.TypeChecker, type: ts.Type): boolean => {
   return t.getProperty("then") !== undefined && t.getProperty("catch") !== undefined;
 };
 
+/** Element type of an array/tuple/ReadonlyArray type, if any. */
+const arrayElementType = (checker: ts.TypeChecker, type: ts.Type): ts.Type | undefined => {
+  if (checker.isArrayType(type) || checker.isTupleType(type)) {
+    const args = checker.getTypeArguments(type as ts.TypeReference);
+    return args.length > 0 ? args[0] : undefined;
+  }
+  return checker.getIndexTypeOfType(type, ts.IndexKind.Number);
+};
+
+/** Resolved type of a Promise<T>, if the type is a promise. */
+const promisedType = (checker: ts.TypeChecker, type: ts.Type): ts.Type | undefined => {
+  if (!isPromiseType(checker, type)) return undefined;
+  const args = checker.getTypeArguments(checker.getApparentType(type) as ts.TypeReference);
+  return args.length > 0 ? args[0] : undefined;
+};
+
+/**
+ * Does a value of this type carry a Result anyone must inspect?
+ * Result | Array<Result> | Promise<Result> | Promise<Array<Result>> | unions of those.
+ * The blind spot this closes: `items.map(fallible)` produces Results nobody reads.
+ */
+export const containsResult = (checker: ts.TypeChecker, type: ts.Type, depth = 0): boolean => {
+  if (depth > 3) return false;
+  if (isResultType(checker, type)) return true;
+  if (type.isUnion() && !isResultType(checker, type)) return type.types.some((m) => containsResult(checker, m, depth + 1));
+  const promised = promisedType(checker, type);
+  if (promised !== undefined) return containsResult(checker, promised, depth + 1);
+  const element = arrayElementType(checker, checker.getApparentType(type));
+  return element !== undefined && containsResult(checker, element, depth + 1);
+};
+
+const isVoidLike = (type: ts.Type): boolean =>
+  (type.flags & (ts.TypeFlags.Void | ts.TypeFlags.Undefined)) !== 0 || (type.isUnion() && type.types.some((m) => (m.flags & ts.TypeFlags.Void) !== 0));
+
+/** A function type whose every call signature returns void (e.g. Array.prototype.forEach's callback). */
+const expectsVoidCallback = (type: ts.Type | undefined): boolean =>
+  type !== undefined && type.getCallSignatures().length > 0 && type.getCallSignatures().every((sig) => isVoidLike(sig.getReturnType()));
+
+const callbackReturnType = (type: ts.Type): ts.Type | undefined => {
+  const sigs = type.getCallSignatures();
+  return sigs.length > 0 ? sigs[0]?.getReturnType() : undefined;
+};
+
 const isBrandedType = (checker: ts.TypeChecker, type: ts.Type, depth = 0): boolean => {
   if (depth > 4) return false;
   if (type.isUnionOrIntersection()) return type.types.some((m) => isBrandedType(checker, m, depth + 1));
@@ -179,6 +222,22 @@ const checkNode = (ctx: Ctx, node: ts.Node): void => {
       report(ctx, node, "no-bare-promise-all", "error", `\`Promise.${callee.name.text}\` fan-out`, "use Async.mapConcurrent / Async.validateConcurrent (bounded, AbortSignal-aware) or Async.withTimeout for races");
     }
 
+    // A callback handed to a void-returning parameter (forEach, event listeners, ...) has its return value
+    // thrown away by the callee. If that return is a Result (or a Promise), the error vanishes just as
+    // surely as with an ignored expression statement — the `forEach` blind spot.
+    for (const arg of node.arguments) {
+      if (ts.isSpreadElement(arg)) continue;
+      const contextual = checker.getContextualType(arg);
+      if (!expectsVoidCallback(contextual)) continue;
+      const returned = callbackReturnType(checker.getTypeAtLocation(arg));
+      if (returned === undefined) continue;
+      if (isPromiseType(checker, returned)) {
+        report(ctx, arg, "floating-async-callback", "error", "async callback in a void context (e.g. forEach) — its promise is dropped, so nothing awaits it and its failure is lost", "use `for (const x of xs) { const r = await f(x); if (!r.ok) return r; }` or Async.mapConcurrent");
+      } else if (containsResult(checker, returned)) {
+        report(ctx, arg, "ignored-result-in-callback", "error", "callback returns a Result into a void context (e.g. forEach) — the caller discards it and the error vanishes", "use R.traverse / R.validateAll / Async.mapConcurrent, or a for-of loop with `if (!r.ok) return r;`");
+      }
+    }
+
     if (ts.isIdentifier(callee) && callee.text === "fetch") {
       const second = node.arguments[1];
       if (second === undefined) report(ctx, node, "fetch-needs-signal", "error", "`fetch` without an AbortSignal", "pass the signal you were handed: fetch(url, { signal })");
@@ -246,6 +305,8 @@ const checkNode = (ctx: Ctx, node: ts.Node): void => {
         const type = checker.getTypeAtLocation(expr);
         if (isResultType(checker, type)) {
           report(ctx, node, "ignored-result", "error", "Result ignored — the error silently vanishes", "handle it: `const r = ...; if (!r.ok) return r;` or discard explicitly with `void` and a reason comment");
+        } else if (!isPromiseType(checker, type) && containsResult(checker, type)) {
+          report(ctx, node, "ignored-result", "error", "a collection of Results ignored — `map` over a fallible function produced Results nobody inspects", "use R.traverse (first error) or R.validateAll (all errors) and handle the Result, or discard explicitly with `void` and a reason comment");
         } else if (!ts.isAwaitExpression(expr) && isPromiseType(checker, type)) {
           report(ctx, node, "floating-async-result", "error", "promise not awaited — its outcome (and any error) is lost", "await it and handle the Result, return it, or discard explicitly with `void` and a reason comment");
         }

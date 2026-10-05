@@ -17,6 +17,18 @@ export const explicitDiscard = (): void => {
   void step(); // fine: explicit discard
 };
 
+const ids: ReadonlyArray<number> = [1, 2, 3];
+export const asyncForEach = (): void => {
+  ids.forEach(async (id) => { // expect: floating-async-callback
+    await step(); // expect: ignored-result
+    return id;
+  });
+  ids.forEach(async () => step()); // expect: floating-async-callback
+};
+export const asyncMapStatement = async (): Promise<void> => {
+  await Async.all(ids.map(() => step())); // expect: ignored-result
+};
+
 export const caught = (): Promise<number> => step().then(() => 1).catch(() => 0); // expect: no-catch
 
 export const fanOut = (): Promise<unknown[]> => Promise.all([step(), step()]); // expect: no-bare-promise-all
