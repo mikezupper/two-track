@@ -1,0 +1,28 @@
+{
+  "name": "two-track-check",
+  "version": "0.1.0",
+  "description": "Static checker for applications built on two-track: finds the anti-FP foot-guns the type checker cannot see, with the fix in every message.",
+  "license": "MIT",
+  "author": "Mike Zupper",
+  "type": "module",
+  "bin": { "two-track-check": "./bin/two-track-check.mjs" },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "files": ["bin", "dist", "README.md"],
+  "engines": { "node": ">=22.18" },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "selfcheck": "node bin/two-track-check.mjs test/fixtures/compliant && node bin/two-track-check.mjs --project tsconfig.self.json .",
+    "check": "pnpm typecheck && pnpm test && pnpm build && pnpm selfcheck"
+  },
+  "dependencies": {
+    "typescript": "6.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "vitest": "^5.0.3"
+  }
+}
