@@ -134,9 +134,27 @@ Effect's third type parameter tracks dependencies in the signature. Without a ru
 
 `typescript-eslint` does not support the TypeScript 7.0 native compiler, and the two-compiler workaround was judged not worth its complexity. Type-level enforcement comes from `tsc` with every strict flag on. Architectural and taste enforcement comes from [`scripts/invariants.ts`](scripts/invariants.ts), a custom linter whose every message ends with the fix, run both as a script and as a structural test. Revisit when typescript-eslint supports TS ≥ 7.1 (tracked in [docs/exec-plans/tech-debt-tracker.md](docs/exec-plans/tech-debt-tracker.md)).
 
-### Decision 8: Data-first functions, namespaced by module
+### Decision 8: Data-first functions, namespaced by module (see below), then three that followed from use
+
+Decisions 9–11 are summarized after Decision 8.
+
+### Decision 8 (continued): Data-first functions, namespaced by module
 
 Every combinator takes the data as its first argument: `R.map(result, f)`, not `map(f)(result)`. Data-first infers types in one pass and allocates no intermediate closures. Point-free, data-last style is deliberately not supported; the measured cost of currying is where Ramda's 20x comes from. Functions are grouped in namespaces (`R`, `O`, `D`, `Async`, `Cap`) so `R.map` and `O.map` coexist, while the constructors you write constantly (`ok`, `err`, `some`, `none`, `match`, `tagged`, `pipe`) are top-level exports.
+
+### Decision 9: Lanes are trigger coordination, not fan-out
+
+`switchLane`, `exhaustLane`, `queueLane`, `debounce`, `throttle` and `semaphore` live in their own module because they answer a different question from `mapConcurrent` and hold contained state. Their failure modes are tagged errors, not dropped promises. They belong in the shell.
+
+### Decision 10: The checker is a separate package on TypeScript 6
+
+The one rule that matters most, an ignored `Result`, needs the compiler's type information, and TypeScript 7 has no JavaScript API. So `two-track-check` is its own dev-time package with its own dependencies, and the library keeps zero. The scaffolded per-project invariants script is retired in favour of it.
+
+### Decision 11: Testing helpers inject fast-check
+
+`two-track/testing` takes the fast-check module as a parameter typed by a minimal structural interface. The package gains law and round-trip helpers without gaining a dependency, which is the same capability-injection idiom the rest of the library uses.
+
+Also amended: `Async.retry` now requires `retriable`. Defaulting to "retry everything" was a foot-gun.
 
 ## Architecture
 
@@ -151,7 +169,11 @@ src/
 ├── decode.ts        Decoder<A>: primitives, refinements, brand, struct/array/record/taggedUnion/oneOf/json/lazy
 ├── capabilities.ts  Clock, Sleeper, Random, IdGen — system and deterministic implementations
 ├── async.ts         AsyncResult, fromPromise/tryPromise, mapConcurrent, validateConcurrent, retry/backoff, withTimeout
-└── index.ts         public surface: types + constructors at top level, everything else under R, O, D, Async, Cap
+├── lanes.ts         trigger coordination: switchLane, exhaustLane, queueLane, debounce, throttle, semaphore
+├── testing.ts       the `two-track/testing` entry: law and round-trip helpers that take fast-check as a parameter
+└── index.ts         public surface: types + constructors at top level, everything else under R, O, D, Async, Cap, Lane
+tools/
+└── check/           `two-track-check` — a SEPARATE dev-time package (TypeScript 6 API) that checks apps for the foot-guns types cannot see
 ```
 
 **Dependency direction is enforced, not described.** [`scripts/invariants.ts`](scripts/invariants.ts) holds a `LAYERS` table listing exactly which modules each module may import, and a new module that is not registered fails the build with a message telling you to register it and update [ARCHITECTURE.md](ARCHITECTURE.md). The layers, lowest first:
@@ -161,7 +183,8 @@ src/
 | Core algebra | `result`, `brand`, `tagged`, `match`, `fn`, `capabilities` | nothing |
 | Core algebra, derived | `option` | `result` |
 | Boundary | `decode` | `result`, `option`, `brand` |
-| Shell | `async` | `result`, `capabilities` |
+| Shell | `async`, `lanes` | `result`, `capabilities` (+ `tagged`, `async` for lanes) |
+| Test support | `testing` | `result`, `option`, `decode` |
 | Surface | `index` | anything |
 
 Nothing in `src/` imports from `node:`; the library is pure web-standard JavaScript (`Promise`, `AbortController`, `crypto.randomUUID`, `setTimeout`) and runs unchanged in browsers and edge runtimes.
@@ -308,7 +331,66 @@ const deps: Deps = { clock: Cap.systemClock, ids: Cap.systemIdGen, orders: pgOrd
 const testDeps: Deps = { clock: Cap.controlledClock(1_700_000_000_000), ids: Cap.sequentialIds("o-"), orders: inMemoryOrders() };
 ```
 
-`Cap.seededRandom(seed)` is a Mulberry32 PRNG for deterministic jitter and sampling; `Cap.instantSleeper()` makes retry tests instant while recording every requested delay.
+`Cap.seededRandom(seed)` is a Mulberry32 PRNG for deterministic jitter and sampling; `Cap.instantSleeper()` makes retry tests instant while recording every requested delay; `Cap.manualSleeper()` fires timers only when a test says so, which is how debounce is tested without real time.
+
+### Lanes: what happens to the previous call
+
+`mapConcurrent` fans out a known collection. Lanes answer a different question, the one UIs, HTTP handlers, webhooks and pollers ask: a new trigger arrived while the last operation is still running — what happens to the old one? These are the RxJS `switchMap` / `exhaustMap` / `concatMap` semantics as plain functions, with the outcomes on the error track where a handler must decide what they mean. They belong in the shell, never in the domain.
+
+```ts
+import { Lane, Cap } from "two-track";
+
+// search-as-you-type: only the latest request may win; superseded calls resolve err(Superseded) at once
+const search = Lane.switchLane((signal, q: string) => api.search(q, signal));
+
+// a save button: ignore clicks while a save is in flight
+const save = Lane.exhaustLane((signal, draft: Draft) => api.save(draft, signal));
+
+// a webhook that must be processed in order, with back-pressure
+const ingest = Lane.queueLane((signal, event: Event) => handle(event, signal), { depth: 100 });
+
+// trailing-edge debounce and leading-edge throttle, timed through capabilities (deterministic in tests)
+const suggest = Lane.debounce((signal, q: string) => api.suggest(q, signal), 250, { sleeper: Cap.systemSleeper });
+const refresh = Lane.throttle((signal) => api.refresh(signal), 1_000, { clock: Cap.systemClock });
+
+// bounded concurrency when you have neither a list nor a trigger
+const db = Lane.semaphore(10);
+const row = await db.run((signal) => repo.find(id, signal));
+```
+
+Each lane adds its failure mode to the returned union (`E | Superseded`, `E | Busy`, `E | QueueFull`), so a `match` at the edge is forced to say what a superseded search or a full queue looks like to the user.
+
+### Testing helpers: laws in one line
+
+`two-track/testing` ships the properties the library uses on itself. fast-check is passed in as the first argument and is never a dependency of the package.
+
+```ts
+import fc from "fast-check";
+import { D, R } from "two-track";
+import { arbDecoded, arbResult, decoderNeverThrows, decoderRoundTrip, functorLaws, monadLaws } from "two-track/testing";
+
+const Email = D.brand(D.pattern(/^[^\s@]+@[^\s@]+$/), "Email");
+const arbEmail = arbDecoded(fc, fc.emailAddress(), Email);
+
+decoderRoundTrip(fc, Email, arbEmail);      // decode(a) == ok(a) for every generated a
+decoderNeverThrows(fc, Email);               // for fc.anything()
+
+// your own combinator over Result? prove it is still a lawful functor/monad
+functorLaws(fc, { arb: arbResult(fc, fc.string(), fc.integer()), map: R.map });
+monadLaws(fc, { arb: arbResult(fc, fc.string(), fc.integer()), of: R.ok, andThen: R.andThen }); // kleisli arrows derived
+```
+
+### The checker: the foot-guns types cannot see
+
+Correctness here is checked, not enforced (see below), so the check has to be a tool rather than a document. `two-track-check` is a separate dev-time package in [`tools/check`](tools/check/) with its own dependencies (it needs TypeScript 6's compiler API; the library and your app stay on TypeScript 7). Every finding ends with the fix:
+
+```
+src/workflows/checkout.ts:41:3: [ignored-result] Result ignored — the error silently vanishes — fix: `if (!r.ok) return r;` or an explicit `void` with a reason comment
+src/domain/pricing.ts:12:18: [no-platform-calls] Date.now() in domain — fix: take a Clock capability (deps.clock.now())
+src/domain/order.ts:3:1: [layer-domain-imports] domain imports "pg" — fix: domain may import only two-track; drivers belong in infra/
+```
+
+The type-aware pair, `ignored-result` and `floating-async-result`, is the point of the package: it is TypeScript's missing `#[must_use]`. Banned constructs, layer direction, brand forging, bare `Promise.all`, `fetch` without a signal, and `default:` without `assertNever` round it out, and `R.unwrapOr` / `D.unknown` are reported at `review` severity for a human to confirm. Suppressions require a reason and are counted. See the package README for usage, config and the full rule table.
 
 ## Conventions
 
@@ -358,7 +440,7 @@ Stated plainly, because a library that hides its limits is a library that gets m
 |---|---|---|
 | A requirements channel (`R` in `Effect<A, E, R>`) | No runtime to resolve it | Capability record as the first argument; one composition root; lint that the domain imports nothing else |
 | Do-notation (`yield*`) | 40–80x measured cost | Early returns in the domain, `await` + `Async.andThen` in the shell |
-| Fibers, interruption, structured concurrency | No runtime | `AbortSignal` threaded through every async combinator; `mapConcurrent` aborts in-flight work on first failure |
+| Fibers, interruption, structured concurrency | No runtime | `AbortSignal` threaded through every async combinator; `mapConcurrent` aborts in-flight work on first failure; `Lane.*` for switch/exhaust/queue semantics |
 | Schemas that double as test generators | No schema runtime | fast-check arbitraries written beside each decoder, with a round-trip property tying them together |
 | Nominal types | TypeScript is structural | Brands applied only inside decoders; the invariants linter rejects `as Brand<` elsewhere |
 | Enforced purity | The compiler cannot see effects | Capabilities by convention, plus lint on `Date.now`/`Math.random`/timers/`console` in domain code |
@@ -402,6 +484,7 @@ pnpm bench            # bench/encodings.ts — the encoding table above, on your
 pnpm bench:check      # same, failing if combinators exceed 4x the inline baseline
 pnpm example          # examples/checkout.ts — the worked workflow end to end
 pnpm build            # emits dist/ with declarations and source maps
+pnpm check:tools      # the two-track-check package: its own typecheck, tests, build and self-check
 ```
 
 Scripts, benchmarks, and examples are plain `.ts` files run directly by Node 22.18+ through native type stripping; the code uses only erasable syntax (`erasableSyntaxOnly` is on) so no transpiler is needed anywhere in the toolchain.

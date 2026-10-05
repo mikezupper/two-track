@@ -13,14 +13,17 @@ Graded per module on four axes: **Types** (does the signature say everything), *
 | `decode.ts` | A | A | A | A | round-trip, never-throws, no-mutation properties; `oneOf` issue reporting is B (tech debt) |
 | `capabilities.ts` | A | A | A | A | seeded PRNG determinism tested |
 | `async.ts` | A | A | B | A | peak-concurrency, fail-fast abort, retry/backoff, timeout tested; perf not benchmarked (I/O bound by nature) |
+| `lanes.ts` | A | A | B | A | switch/exhaust/queue/debounce/throttle/semaphore; deterministic tests via manualSleeper/controlledClock; not benchmarked (trigger-rate bound) |
+| `testing.ts` | A | A | — | A | helpers proven against R/O and a broken functor; `FastCheckLike` is public surface |
 | `index.ts` | A | — | — | A | surface documented in ARCHITECTURE.md |
+| `tools/check` (two-track-check) | A | A | — | A | separate package on TS 6 API; fixtures per rule; runs on its own src and on examples/ |
 
 **Repository**
 
 | Axis | Grade | Notes |
 |---|---|---|
-| Invariants coverage | A | 17 source rules + layers + docs integrity + plan shape; remediation in every message |
+| Invariants coverage | A | 17 source rules + layers + docs integrity + plan shape in `scripts/invariants.ts`; application-level rules in `two-track-check` |
 | CI | B | bench is report-only on shared runners (noise); ratio enforced locally |
 | Coverage | A | 99.6% statements, 97.7% branches (thresholds 95/90) |
 | Docs freshness | A | links checked by linter; decisions indexed by linter |
-| Lint (type-aware) | C | none (decision 0007; tech debt) |
+| Lint (type-aware) | B | `two-track-check` (decision 0010) covers the foot-guns incl. ignored Results; no generic ESLint rules yet |

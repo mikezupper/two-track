@@ -30,3 +30,6 @@ Status: accepted | superseded by NNNN | rejected        Date: YYYY-MM-DD
 | [0006](decisions/0006-decoders-accumulate-with-path-stack.md) | Decoders accumulate all issues; the path is a mutable stack owned by the call | accepted | decode round-trip and never-throws properties |
 | [0007](decisions/0007-toolchain-ts7-custom-invariants.md) | TypeScript 7 for types; custom invariants script for architecture; no ESLint until typescript-eslint supports TS ≥ 7.1 | accepted | `scripts/invariants.ts`; CI |
 | [0008](decisions/0008-data-first-namespaced-api.md) | Data-first function signatures; module namespaces `R O D Async Cap`; no point-free/currying | accepted | API shape; README conventions |
+| [0009](decisions/0009-lanes-trigger-coordination.md) | `Lane`: switch/exhaust/queue/debounce/throttle/semaphore — trigger coordination, distinct from fan-out | accepted | lanes tests (peak concurrency, abort, ordering) |
+| [0010](decisions/0010-checker-as-separate-package.md) | `two-track-check` ships as a separate dev package on TypeScript 6's API; type-aware `ignored-result` rule | accepted | `tools/check` tests; CI `check:tools` |
+| [0011](decisions/0011-testing-helpers-inject-fast-check.md) | `two-track/testing` law/round-trip helpers take fast-check as a parameter; no dependency | accepted | `test/testing.test.ts` |

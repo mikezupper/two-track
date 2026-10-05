@@ -57,7 +57,7 @@ describe("laws against two-track's own types", () => {
       arb: arbR,
       of: (a) => ok<number>(a) as Result<string, number>,
       andThen: (fa, f) => R.andThen(fa, f),
-      arbKleisli: fc.func(arbR as fc.Arbitrary<Result<string, number>>),
+      arbKleisli: arbR.map((fa) => (n: number) => (n % 2 === 0 ? fa : R.ok(n))),
     });
   });
 
@@ -67,7 +67,7 @@ describe("laws against two-track's own types", () => {
       arb: arbO,
       of: (a) => some<number>(a) as Option<number>,
       andThen: (fa, f) => O.andThen(fa, f),
-      arbKleisli: fc.func(arbO as fc.Arbitrary<Option<number>>),
+      arbKleisli: arbO.map((fa) => (n: number) => (n % 2 === 0 ? fa : O.some(n))),
     });
   });
 
@@ -103,7 +103,7 @@ describe("laws detect violations", () => {
         arb: arbR,
         of: (a) => ok<number>(a) as Result<string, number>,
         andThen: (fa) => fa,
-        arbKleisli: fc.func(arbR as fc.Arbitrary<Result<string, number>>),
+        arbKleisli: arbR.map((fa) => (n: number) => (n % 2 === 0 ? fa : R.ok(n))),
       }),
     ).toThrow();
   });
@@ -114,7 +114,7 @@ describe("laws detect violations", () => {
         arb: arbR,
         of: (a) => ok<number>(a + 1) as Result<string, number>,
         andThen: (fa, f) => R.andThen(fa, f),
-        arbKleisli: fc.func(arbR as fc.Arbitrary<Result<string, number>>),
+        arbKleisli: arbR.map((fa) => (n: number) => (n % 2 === 0 ? fa : R.ok(n))),
       }),
     ).toThrow();
   });
@@ -153,5 +153,15 @@ describe("decoder properties", () => {
   it("structuralEq compares by JSON", () => {
     expect(structuralEq({ a: [1, { b: 2 }] }, { a: [1, { b: 2 }] })).toBe(true);
     expect(structuralEq({ a: 1 }, { a: 2 })).toBe(false);
+  });
+});
+
+describe("monadLaws without an explicit arbKleisli", () => {
+  it("derives kleisli arrows and still passes for Result and Option", () => {
+    monadLaws(fc, { arb: arbResult(fc, fc.string(), fc.integer()), of: R.ok, andThen: R.andThen });
+    monadLaws(fc, { arb: arbOption(fc, fc.integer()), of: O.some, andThen: O.andThen });
+  });
+  it("derived arrows still detect a continuation-dropping andThen", () => {
+    expect(() => monadLaws(fc, { arb: arbResult(fc, fc.string(), fc.integer()), of: R.ok, andThen: (fa) => fa })).toThrow();
   });
 });

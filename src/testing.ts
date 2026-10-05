@@ -25,6 +25,13 @@ import type { Result } from "./result.ts";
 import { err, ok } from "./result.ts";
 
 /** The subset of a fast-check `Arbitrary<T>` these helpers rely on. */
+/**
+ * The structural shape of a fast-check Arbitrary that these helpers rely on.
+ * Arbitraries RETURNED by `arbResult`/`arbOption`/`arbDecoded` are typed as this
+ * structural `Arb<T>`, not as fast-check's class, so they are accepted by every
+ * helper here but need `as fc.Arbitrary<T>` if you hand them back to fast-check
+ * combinators such as `fc.record` or `fc.func` (tracked in tech debt).
+ */
 export type Arb<T> = {
   map<U>(mapper: (t: T) => U): Arb<U>;
   filter(predicate: (t: T) => boolean): Arb<T>;
@@ -120,15 +127,31 @@ export const monadLaws = <F>(
     readonly arb: Arb<F>;
     readonly of: (a: number) => F;
     readonly andThen: (fa: F, f: (a: number) => F) => F;
-    readonly arbKleisli: Arb<(a: number) => F>;
+    /**
+     * Kleisli arrows `number => F`. Optional: when omitted they are derived from
+     * `arb`, `of` and `andThen` (arrows that return a generated container, an
+     * `of` of the input, or a dependent `andThen`), which exercises both tracks
+     * without needing `fc.func` on a structural `Arb`.
+     */
+    readonly arbKleisli?: Arb<(a: number) => F>;
     readonly equals?: Eq<F>;
   },
 ): void => {
   const equals = spec.equals ?? structuralEq;
-  fc.assert(fc.property(fc.integer(), spec.arbKleisli, (a: number, f: (a: number) => F) => equals(spec.andThen(spec.of(a), f), f(a))));
+  const arbKleisli: Arb<(a: number) => F> =
+    spec.arbKleisli ??
+    spec.arb.chain((fa) =>
+      fc.integer({ min: 0, max: 3 }).map((mode) => (n: number): F => {
+        if (mode === 0) return fa;
+        if (mode === 1) return spec.of(n);
+        if (mode === 2) return spec.of(n * 2 + 1);
+        return spec.andThen(fa, (x) => spec.of(x + n));
+      }),
+    );
+  fc.assert(fc.property(fc.integer(), arbKleisli, (a: number, f: (a: number) => F) => equals(spec.andThen(spec.of(a), f), f(a))));
   fc.assert(fc.property(spec.arb, (fa: F) => equals(spec.andThen(fa, spec.of), fa)));
   fc.assert(
-    fc.property(spec.arb, spec.arbKleisli, spec.arbKleisli, (fa: F, f: (a: number) => F, g: (a: number) => F) =>
+    fc.property(spec.arb, arbKleisli, arbKleisli, (fa: F, f: (a: number) => F, g: (a: number) => F) =>
       equals(spec.andThen(spec.andThen(fa, f), g), spec.andThen(fa, (x) => spec.andThen(f(x), g))),
     ),
   );

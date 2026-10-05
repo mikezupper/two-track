@@ -24,5 +24,7 @@ jobs:
         run: pnpm vitest run --coverage
       - name: Build
         run: pnpm build
+      - name: two-track-check package (own TS 6 toolchain)
+        run: pnpm check:tools
       - name: Benchmark (report only on shared runners; the 4x ratio is enforced locally via pnpm bench:check)
         run: pnpm bench

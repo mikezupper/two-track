@@ -21,6 +21,10 @@ Asynchronous railways can be a lazy `Task`/`Future` type (Fluture, fp-ts `TaskEi
 - **Lazy `Task`** — rejected for interop and runtime cost; retry is instead a function that takes a thunk.
 - **A `ResultAsync` wrapper class with methods** — rejected per 0001 (classes) and because it hides the promise from `Promise.all`/`race`.
 
+## Amendment (2026-10-05)
+
+`RetryPolicy.retriable` is **required**. The original optional field defaulted to "retry everything", which is the classic foot-gun of retrying a validation error five times. Callers that genuinely want to retry every error write `retriable: () => true` and thereby say so.
+
 ## Consequences
 
 - `no-catch-method` invariant; `.then(ok, onRejected)` is the internal idiom.
