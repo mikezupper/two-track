@@ -78,6 +78,56 @@ export const instantSleeper = (): Sleeper & { readonly calls: ReadonlyArray<numb
   };
 };
 
+type ManualTimer = { readonly ms: number; readonly resolve: () => void; readonly signal: AbortSignal | undefined; readonly onAbort: () => void };
+
+/**
+ * A sleeper whose timers only fire when the test says so. `pending()` lists
+ * outstanding delays in call order; `fire(index = 0)` resolves one;
+ * `fireAll()` resolves all. Aborting a signal passed to `sleep` resolves that
+ * sleep immediately and removes it from `pending()`. Drives `Lane.debounce`
+ * and any retry loop deterministically.
+ */
+export const manualSleeper = (): Sleeper & {
+  readonly pending: () => ReadonlyArray<number>;
+  readonly fire: (index?: number) => void;
+  readonly fireAll: () => void;
+} => {
+  const timers: ManualTimer[] = [];
+  const remove = (timer: ManualTimer): void => {
+    const i = timers.indexOf(timer);
+    if (i >= 0) timers.splice(i, 1);
+  };
+  const fire = (index = 0): void => {
+    const timer = timers[index];
+    if (timer === undefined) return;
+    remove(timer);
+    timer.signal?.removeEventListener("abort", timer.onAbort);
+    timer.resolve();
+  };
+  return {
+    pending: () => timers.map((t) => t.ms),
+    fire,
+    fireAll: () => {
+      while (timers.length > 0) fire(0);
+    },
+    sleep: (ms, signal) =>
+      new Promise((resolve) => {
+        if (signal?.aborted) return resolve();
+        const timer: ManualTimer = {
+          ms,
+          resolve,
+          signal,
+          onAbort: () => {
+            remove(timer);
+            resolve();
+          },
+        };
+        signal?.addEventListener("abort", timer.onAbort, { once: true });
+        timers.push(timer);
+      }),
+  };
+};
+
 /** Mulberry32: a small, fast, seedable PRNG. Same seed, same sequence, every run. */
 export const seededRandom = (seed: number): Random => {
   let state = seed >>> 0;

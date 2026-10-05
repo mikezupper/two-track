@@ -49,3 +49,46 @@ describe("capabilities", () => {
     expect(Cap.sequentialIds().next()).toBe("id-1");
   });
 });
+
+describe("manualSleeper", () => {
+  it("fires timers only on demand, in call order or by index", async () => {
+    const s = Cap.manualSleeper();
+    const done: string[] = [];
+    void s.sleep(100).then(() => done.push("a"));
+    void s.sleep(200).then(() => done.push("b"));
+    void s.sleep(300).then(() => done.push("c"));
+    expect(s.pending()).toEqual([100, 200, 300]);
+    await Promise.resolve();
+    expect(done).toEqual([]);
+    s.fire(1);
+    await Promise.resolve();
+    expect(done).toEqual(["b"]);
+    expect(s.pending()).toEqual([100, 300]);
+    s.fire();
+    await Promise.resolve();
+    expect(done).toEqual(["b", "a"]);
+    s.fireAll();
+    await Promise.resolve();
+    expect(done).toEqual(["b", "a", "c"]);
+    expect(s.pending()).toEqual([]);
+    s.fire(5); // out of range: no-op
+  });
+
+  it("an aborted signal resolves the sleep immediately and removes it from pending", async () => {
+    const s = Cap.manualSleeper();
+    const c = new AbortController();
+    let resolved = false;
+    const p = s.sleep(50, c.signal).then(() => {
+      resolved = true;
+    });
+    expect(s.pending()).toEqual([50]);
+    c.abort();
+    await p;
+    expect(resolved).toBe(true);
+    expect(s.pending()).toEqual([]);
+    const already = new AbortController();
+    already.abort();
+    await s.sleep(10, already.signal);
+    expect(s.pending()).toEqual([]);
+  });
+});
