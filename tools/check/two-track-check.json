@@ -1,0 +1,6 @@
+{
+  "layers": { "domain": [], "workflows": [], "infra": [], "lib": ["src/rules.ts", "src/config.ts", "src/program.ts", "src/index.ts"], "root": ["src/cli.ts"] },
+  "brandFiles": [],
+  "testFiles": ["test/**"],
+  "include": ["src/**"]
+}

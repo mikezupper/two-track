@@ -1,0 +1,2 @@
+{ "layers": { "domain": ["src/domain"], "workflows": ["src/workflows"], "infra": ["src/infra"], "lib": ["src/lib"], "root": ["src/main.ts"] },
+  "brandFiles": ["**/domain/types.ts"] }
