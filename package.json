@@ -11,12 +11,15 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./testing": {
       "types": "./dist/testing.d.ts",
-      "import": "./dist/testing.js"
-    }
+      "import": "./dist/testing.js",
+      "default": "./dist/testing.js"
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
@@ -24,20 +27,21 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=22.18"
+    "node": ">=20"
   },
   "packageManager": "pnpm@10.33.2",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "tsc -p tsconfig.build.json && node scripts/fix-dts-extensions.ts",
     "typecheck": "tsc --noEmit",
     "lint": "node scripts/lint-invariants.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "bench": "node bench/encodings.ts",
-    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm bench:check",
+    "check": "pnpm typecheck && pnpm lint && pnpm test && pnpm bench:check && pnpm build && pnpm check:package",
     "example": "node examples/checkout.ts",
     "bench:check": "node bench/encodings.ts --check",
-    "check:tools": "pnpm -r --filter two-track-check check"
+    "check:tools": "pnpm -r --filter two-track-check check",
+    "check:package": "node scripts/check-package.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",
@@ -45,5 +49,27 @@
     "fast-check": "^4.10.2",
     "typescript": "^7.0.2",
     "vitest": "^5.0.3"
-  }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikezupper/two-track.git"
+  },
+  "homepage": "https://github.com/mikezupper/two-track#readme",
+  "bugs": {
+    "url": "https://github.com/mikezupper/two-track/issues"
+  },
+  "keywords": [
+    "result",
+    "option",
+    "railway-oriented",
+    "functional",
+    "typescript",
+    "zero-dependency",
+    "decoder",
+    "parse-dont-validate"
+  ]
 }

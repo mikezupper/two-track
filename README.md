@@ -305,12 +305,15 @@ const priced = await Async.mapConcurrent(lines, (line, _i, signal) => priceLine(
 // Accumulating fan-out for batch jobs
 const report = await Async.validateConcurrent(rows, importRow, { concurrency: 16 });
 
-// Retry only what is transient, with exponential backoff and jitter from an injectable Random
+// Retry only what is transient, with exponential backoff and jitter from an injectable Random.
+// `retriable` is required. With a `signal`, an abort between attempts yields err(Aborted) and the
+// error type widens to E | Aborted — so cancellation is visible in the signature, not guessed from the last error.
 const charged = await Async.retry((attempt, signal) => gateway.charge(order, signal), {
   attempts: 5,
   delay: Async.backoff({ baseMs: 100, maxMs: 2_000, random: deps.random.next }),
   retriable: (e) => e._tag === "GatewayTimeout",
   sleeper: deps.sleeper,
+  signal: request.signal,
 });
 
 // Deadlines that actually cancel
@@ -469,6 +472,7 @@ This repository is built to be worked on by coding agents with humans steering, 
 - **`docs/` is the system of record.** [Design docs](docs/design-docs/index.md) hold the [core beliefs](docs/design-docs/core-beliefs.md) and one decision record per non-obvious choice, each with its evidence. [Execution plans](docs/exec-plans/) are checked in with progress and decision logs; completed plans stay as history; [tech debt](docs/exec-plans/tech-debt-tracker.md) is tracked next to them. [QUALITY_SCORE.md](docs/QUALITY_SCORE.md) grades each module and names the gaps. [References](docs/references/) hold the benchmark results with their method.
 - **Invariants are enforced mechanically, with remediation in the message.** [`scripts/invariants.ts`](scripts/invariants.ts) checks zero runtime dependencies, banned constructs, layer direction, file size, that every markdown link resolves, that every decision is indexed, and that every active plan has the required sections. Every violation message ends with "fix: …" because the reader is usually an agent that will apply it without further context. The same checks run as a structural test so `pnpm test` fails on drift.
 - **Performance is an invariant, not a hope.** `pnpm bench:check` fails if the library's combinators exceed 4x the inline baseline.
+- **Time-dependent code is property-tested, and that is enforced.** Every export of `async`, `lanes` and `capabilities` must appear in its `*.properties.test.ts`, where fast-check drives generated event sequences over `manualSleeper` and `controlledClock` and checks leaks (no pending timers, no abort listeners). A downstream consumer found the retry cancellation bug that this now catches; the write-up is in [docs/exec-plans/completed/0002-downstream-findings.md](docs/exec-plans/completed/0002-downstream-findings.md).
 - **Progressive disclosure.** An agent starts at AGENTS.md, is pointed to ARCHITECTURE.md and the decision index, and reads a reference only when working in that area.
 - **The companion skill is the taste layer.** [two-track-fp-skill](https://github.com/mikezupper/two-track-fp-skill) encodes how application code built on this library should look, with its own hard rules, decision tables, anti-pattern lists, and a mandatory self-review pass.
 
@@ -485,6 +489,7 @@ pnpm bench:check      # same, failing if combinators exceed 4x the inline baseli
 pnpm example          # examples/checkout.ts — the worked workflow end to end
 pnpm build            # emits dist/ with declarations and source maps
 pnpm check:tools      # the two-track-check package: its own typecheck, tests, build and self-check
+pnpm check:package    # pack + install + import/require + tsc (TS 6 and 7, skipLibCheck false) as a consumer would
 ```
 
 Scripts, benchmarks, and examples are plain `.ts` files run directly by Node 22.18+ through native type stripping; the code uses only erasable syntax (`erasableSyntaxOnly` is on) so no transpiler is needed anywhere in the toolchain.
@@ -493,15 +498,21 @@ The definition of done for any change is `pnpm check` green, the relevant decisi
 
 ## Installation and compatibility
 
-Not yet published to npm. Install from git:
-
 ```bash
-pnpm add github:mikezupper/two-track
+pnpm add two-track            # once published (release workflow: tag v* → npm trusted publishing with provenance)
+pnpm add github:mikezupper/two-track   # until then
 ```
 
-- **Runtime:** any ES2023 JavaScript engine with `Promise`, `AbortController`, `crypto.randomUUID`, and `setTimeout`. Verified on Node 24 and Bun 1.3; nothing in `src/` is Node-specific.
-- **TypeScript:** 7.0+ with `strict`. The types rely on `const` type parameters and `exactOptionalPropertyTypes`-aware optional keys; older compilers may infer less precisely.
-- **Module format:** ESM only, `sideEffects: false`, tree-shakeable by namespace.
+**Consumer requirements** (what `dist/` needs) are deliberately looser than **contributor requirements** (what developing this repo needs):
+
+| | Consumer | Contributor |
+|---|---|---|
+| Runtime | any ES2023 engine with `Promise`, `AbortController`, `crypto.randomUUID`, `setTimeout`; Node ≥ 20, Bun, Deno, browsers, edge workers | Node ≥ 22.18 (runs `.ts` scripts via native type stripping) |
+| TypeScript | 6.0+ verified with `skipLibCheck: false`; 5.x expected to work (the types use `const` type parameters) | 7.0 (the compiler used for `typecheck` and `build`) |
+| Module format | ESM with `default` conditions, so `require("two-track")` works on Node ≥ 22.12 via `require(esm)`; `two-track/package.json` is exported | — |
+
+`pnpm check:package` proves this on every change: it packs the tarball, installs it in a scratch project, imports and requires it, and compiles a consumer with `skipLibCheck: false` under TypeScript 6 and TypeScript 7.
+- **Tree-shaking:** `sideEffects: false`; namespaces are plain module objects.
 - **Versioning:** semver once published. The encoding of `Result` and `Option` (field names `ok`/`value`/`error` and `some`/`value`) is part of the public contract and will not change in a minor version, because user code narrows on it directly.
 
 ## Sources and credits

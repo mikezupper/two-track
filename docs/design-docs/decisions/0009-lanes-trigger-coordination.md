@@ -21,6 +21,10 @@ Status: accepted        Date: 2026-10-05
 - **An observable/stream type** — rejected: a runtime, a second composition model, and the error track would move into stream semantics.
 - **Leave it to user code** — rejected: the switch pattern in particular is subtle (the superseded promise must settle even if its run ignores the signal), and getting it wrong leaks requests.
 
+## Amendment (2026-10-05, downstream finding 2b)
+
+After a lane-level abort, `queueLane` resolves every call still waiting as `err(Busy)` without starting it, and rejects new calls as `Busy`, the same meaning a `semaphore` waiter gets. The run in flight finishes on its own after seeing the abort. The returned union is `E | QueueFull | Busy`.
+
 ## Consequences
 
 - Lanes live in the shell (UI event handlers, HTTP adapters), never in `domain/`; the skill's decision table says so.

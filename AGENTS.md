@@ -13,6 +13,7 @@
 - Zero runtime dependencies in the library (root `package.json`). Implement helpers in `src/`; dev dependencies are fine. `tools/check` is a separate package and may depend on TypeScript 6.
 - In `src/`: no `throw` (except `assertNever`), no `try` (except the three interop edges), no `.catch(`, no `any`, no generators, no `Object.freeze`, no classes, no `console`, no `node:` imports, no platform time/random/timers outside `capabilities.ts`.
 - Layer direction per the `LAYERS` table in `scripts/invariants.ts` and `ARCHITECTURE.md`. New module → register it in both.
+- Every export of `src/async.ts`, `src/lanes.ts`, `src/capabilities.ts` appears in `test/<module>.properties.test.ts` (fast-check over generated schedules with `Cap.manualSleeper`/`controlledClock`).
 - Every `docs/` link resolves; every decision file is listed in `docs/design-docs/index.md`; every active plan has `## Progress` and `## Decision log`.
 - Encoding contract: `Result` is `{ ok: true, value } | { ok: false, error }`, `Option` is `{ some: true, value } | { some: false }`. User code narrows on these; do not rename.
 
@@ -21,6 +22,7 @@
 ```bash
 pnpm check        # definition of done: typecheck + lint + test + bench:check
 pnpm check:tools  # the two-track-check package (tools/check): its typecheck + tests + build + self-check
+pnpm check:package # pack + install + import/require + tsc under TS 6 and 7 as a consumer (part of pnpm check)
 pnpm test         # vitest (unit, fast-check properties, structural invariants, example)
 pnpm lint         # node scripts/lint-invariants.ts
 pnpm bench        # node bench/encodings.ts   (--check enforces the 4x ratio)

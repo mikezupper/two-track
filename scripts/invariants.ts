@@ -108,6 +108,31 @@ export const checkInvariants = (root: string): Violation[] => {
     }
   }
 
+  // ---- 3b. time-dependent modules: every export has a property test ----
+  // Example tests show the cases we thought of; the subtle cancellation bugs live in
+  // the cases we did not. Each exported function of async.ts / lanes.ts / capabilities.ts
+  // must be exercised in the module's *.properties.test.ts file (fast-check).
+  for (const mod of ["async", "lanes", "capabilities"]) {
+    const srcFile = join(root, "src", `${mod}.ts`);
+    const propFile = join(root, "test", `${mod}.properties.test.ts`);
+    if (!existsSync(srcFile)) continue;
+    if (!existsSync(propFile)) {
+      violations.push({ file: `test/${mod}.properties.test.ts`, line: 1, rule: "property-tests-exist", message: `missing — fix: add fast-check property tests for src/${mod}.ts (core belief 8: laws are tests)` });
+      continue;
+    }
+    const props = readFileSync(propFile, "utf8");
+    if (!/\bfc\.(assert|asyncProperty|property)\b/.test(props)) {
+      violations.push({ file: `test/${mod}.properties.test.ts`, line: 1, rule: "property-tests-exist", message: `contains no fast-check property — fix: use fc.assert(fc.asyncProperty(...)) over generated event sequences` });
+    }
+    const exported = [...readFileSync(srcFile, "utf8").matchAll(/^export (?:const|function|async function) ([A-Za-z_][A-Za-z0-9_]*)/gm)].map((m) => m[1] as string);
+    for (const name of exported) {
+      if (/^[A-Z]/.test(name)) continue; // tagged-error constructors and types are data, not behaviour
+      if (!new RegExp(`\\b${name}\\b`).test(props)) {
+        violations.push({ file: `test/${mod}.properties.test.ts`, line: 1, rule: "property-test-coverage", message: `src/${mod}.ts exports \`${name}\` but the property test file never mentions it — fix: add a property for its invariants (see the downstream bug report in docs/exec-plans/completed/0002-downstream-findings.md)` });
+      }
+    }
+  }
+
   // ---- 4. docs are a system of record: links resolve, decisions are indexed ----
   const mdFiles = ["AGENTS.md", "ARCHITECTURE.md", "README.md", ...walk(join(root, "docs")).filter((f) => f.endsWith(".md")).map(rel)];
   for (const name of mdFiles) {

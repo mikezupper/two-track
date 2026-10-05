@@ -25,6 +25,10 @@ Asynchronous railways can be a lazy `Task`/`Future` type (Fluture, fp-ts `TaskEi
 
 `RetryPolicy.retriable` is **required**. The original optional field defaulted to "retry everything", which is the classic foot-gun of retrying a validation error five times. Callers that genuinely want to retry every error write `retriable: () => true` and thereby say so.
 
+## Amendment (2026-10-05, downstream finding 1)
+
+`retry` checks its `signal` before every attempt **and after every backoff sleep** (sleepers resolve, not reject, on abort, so the previous after-sleep fall-through ran one extra attempt). On abort it returns `err(Aborted)`; the error type is `E | Aborted` only for policies that pass a `signal`, so uncancellable call sites are unchanged.
+
 ## Consequences
 
 - `no-catch-method` invariant; `.then(ok, onRejected)` is the internal idiom.
