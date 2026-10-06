@@ -5,19 +5,33 @@
   "license": "MIT",
   "author": "Mike Zupper",
   "type": "module",
-  "bin": { "two-track-check": "./bin/two-track-check.mjs" },
+  "bin": {
+    "two-track-check": "./bin/two-track-check.mjs"
+  },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "files": ["bin", "dist", "README.md"],
-  "engines": { "node": ">=22.18" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "selfcheck": "node bin/two-track-check.mjs test/fixtures/compliant && node bin/two-track-check.mjs --project tsconfig.self.json .",
-    "check": "pnpm typecheck && pnpm test:coverage && pnpm build && pnpm selfcheck"
+    "check": "pnpm typecheck && pnpm test:coverage && pnpm build && pnpm selfcheck",
+    "prepare": "node -e \"process.exit(require('fs').existsSync('dist/cli.js')?0:1)\" 2>/dev/null || npm run build"
   },
   "dependencies": {
     "typescript": "6.0.3"
