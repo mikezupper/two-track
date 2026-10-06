@@ -49,6 +49,7 @@ All notable changes to `two-track` are recorded here. The format follows Keep a 
 - `prepare` scripts in both packages build `dist/` when installed from git (`pnpm add github:mikezupper/two-track`); pnpm 10 consumers allowlist them in `pnpm.onlyBuiltDependencies`. `two-track-check` declares `engines.node >=20` like the library (its bin runs built JavaScript).
 
 ### Testing
+- `pnpm bench:record` writes `docs/references/measurements.json` (encodings, decoder comparison, bundle sizes, lane ratios); the `quoted-measurements` invariant fails when a headline table row in README or benchmarks quotes a figure outside tolerance of the recorded run. `bench/encodings.ts` and `bench/lanes.ts` gained `--json`.
 - `pnpm bench:lanes` / `pnpm check:lanes`: per-trigger overhead of every lane under immediate and waiting workloads with heap-retention figures; `--check` enforces ratio gates against a same-run baseline and is part of `pnpm check` and CI.
 - `pnpm bench:cross` (workspace `bench/cross`, own dev deps): decoders versus Zod 4 / Valibot / ArkType on an identical schema with a validity-agreement assertion, and the railway versus Ramda / Effect from the built `dist/`; both run report-only in CI. The root README's "as fast as compiled validators" claim was measured, found false for valid input against ArkType, and replaced by the table.
 - CLI, config/project failure paths, direct subpath imports, negative architecture invariants, large nested decoding and cancellation race regressions; HTML and JSON coverage reports for both packages.

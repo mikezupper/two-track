@@ -99,7 +99,8 @@
     "bench:cross": "pnpm --filter two-track-bench-cross bench",
     "bench:lanes": "node bench/lanes.ts",
     "check:lanes": "node bench/lanes.ts --check",
-    "prepare": "node -e \"process.exit(require('fs').existsSync('dist/index.js')?0:1)\" 2>/dev/null || pnpm build"
+    "prepare": "node -e \"process.exit(require('fs').existsSync('dist/index.js')?0:1)\" 2>/dev/null || pnpm build",
+    "bench:record": "node scripts/record-measurements.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

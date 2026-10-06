@@ -154,6 +154,56 @@ export const checkInvariants = (root: string): Violation[] => {
     }
   }
 
+  // ---- 3c. quoted measurements match the recorded run (core belief 3, made mechanical) ----
+  // `pnpm bench:record` writes docs/references/measurements.json; each named table row below must
+  // quote that run within tolerance. Re-record, then update the tables — never the other way round.
+  const measurementsFile = join(root, "docs/references/measurements.json");
+  if (existsSync(measurementsFile)) {
+    const recorded = (JSON.parse(readFileSync(measurementsFile, "utf8")) as { entries: Record<string, number> }).entries;
+    type Quote = { readonly file: string; readonly row: RegExp; readonly col: number; readonly key: string; readonly tolerance: number };
+    const quotes: ReadonlyArray<Quote> = [
+      { file: "docs/references/benchmarks.md", row: /^inline two-shape objects \(baseline\)$/, col: 1, key: "encodings.node.baselineMs", tolerance: 0.2 },
+      { file: "docs/references/benchmarks.md", row: /^two-track R\.andThen combinators$/, col: 1, key: "encodings.node.combinatorsMs", tolerance: 0.2 },
+      { file: "docs/references/benchmarks.md", row: /^two-track 0\.1\.0 \(interpreter\)$/, col: 4, key: "decoders.node.interpreterNs", tolerance: 0.2 },
+      { file: "docs/references/benchmarks.md", row: /^two-track 0\.1\.0 D\.compile$/, col: 4, key: "decoders.node.compiledNs", tolerance: 0.2 },
+      { file: "docs/references/benchmarks.md", row: /^arktype 2\.2\.7$/, col: 4, key: "decoders.node.arktypeNs", tolerance: 0.2 },
+      { file: "docs/references/benchmarks.md", row: /^semaphore\(16\)\.run$/, col: 2, key: "lanes.node.semaphoreImmediateRatio", tolerance: 0.3 },
+      { file: "docs/references/benchmarks.md", row: /^Result ok \+ err \+ andThen$/, col: 2, key: "bundles.esbuild.resultDirect", tolerance: 0.05 },
+      { file: "docs/references/benchmarks.md", row: /^struct decoder$/, col: 2, key: "bundles.esbuild.decoderDirect", tolerance: 0.05 },
+      { file: "docs/references/benchmarks.md", row: /^primitive decoder$/, col: 2, key: "bundles.esbuild.primitiveDirect", tolerance: 0.05 },
+      { file: "README.md", row: /^Two plain shapes/, col: 1, key: "encodings.node.baselineMs", tolerance: 0.2 },
+      { file: "README.md", row: /^two-track R\.andThen combinators/, col: 1, key: "encodings.node.combinatorsMs", tolerance: 0.2 },
+      { file: "README.md", row: /^two-track 0\.1\.0, interpreter$/, col: 4, key: "decoders.node.interpreterNs", tolerance: 0.2 },
+      { file: "README.md", row: /^two-track 0\.1\.0, D\.compile$/, col: 4, key: "decoders.node.compiledNs", tolerance: 0.2 },
+      { file: "README.md", row: /^arktype 2\.2\.7$/, col: 4, key: "decoders.node.arktypeNs", tolerance: 0.2 },
+    ];
+    const clean = (cell: string): string => cell.replace(/[`*~]/g, "").trim();
+    const firstNumber = (cell: string): number | undefined => {
+      const m = /-?\d[\d,]*(?:\.\d+)?/.exec(clean(cell));
+      return m === null ? undefined : Number(m[0].replace(/,/g, ""));
+    };
+    for (const q of quotes) {
+      const expected = recorded[q.key];
+      if (expected === undefined) {
+        violations.push({ file: "docs/references/measurements.json", line: 1, rule: "quoted-measurements", message: `no entry "${q.key}" — fix: run pnpm bench:record (scripts/record-measurements.mjs records it)` });
+        continue;
+      }
+      const lines = readFileSync(join(root, q.file), "utf8").split("\n");
+      let seen = false;
+      lines.forEach((text, i) => {
+        if (!text.startsWith("|")) return;
+        const cells = text.split("|").slice(1, -1);
+        if (cells.length <= q.col || !q.row.test(clean(cells[0] as string))) return;
+        seen = true;
+        const quoted = firstNumber(cells[q.col] as string);
+        if (quoted === undefined || Math.abs(quoted - expected) > q.tolerance * expected) {
+          violations.push({ file: q.file, line: i + 1, rule: "quoted-measurements", message: `row "${clean(cells[0] as string)}" quotes ${quoted ?? "nothing"} for ${q.key}; the recorded run says ${expected.toFixed(1)} (tolerance ±${q.tolerance * 100}%) — fix: run pnpm bench:record, then update this table to the recorded run with its date` });
+        }
+      });
+      if (!seen) violations.push({ file: q.file, line: 1, rule: "quoted-measurements", message: `no table row matching ${q.row} — fix: keep the row (the docs quote ${q.key} there) or remove the quote config in scripts/invariants.ts` });
+    }
+  }
+
   // ---- 4. docs are a system of record: links resolve, decisions are indexed ----
   const mdFiles = ["AGENTS.md", "ARCHITECTURE.md", "README.md", ...walk(join(root, "docs")).filter((f) => f.endsWith(".md")).map(rel)];
   for (const name of mdFiles) {

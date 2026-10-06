@@ -1,0 +1,20 @@
+{
+  "recordedAt": "2026-10-06T16:15:26.534Z",
+  "runtime": "node v24.15.0",
+  "entries": {
+    "encodings.node.baselineMs": 12.67672600000003,
+    "encodings.node.combinatorsMs": 22.29642799999999,
+    "decoders.node.interpreterNs": 781.299755,
+    "decoders.node.compiledNs": 303.30329999999776,
+    "decoders.node.zodNs": 978.6973949999992,
+    "decoders.node.valibotNs": 1061.3743149999937,
+    "decoders.node.arktypeNs": 221.13178499999776,
+    "bundles.rolldown.full": 22511,
+    "bundles.esbuild.full": 22287,
+    "bundles.esbuild.resultDirect": 117,
+    "bundles.esbuild.decoderDirect": 2419,
+    "bundles.esbuild.primitiveDirect": 1157,
+    "lanes.node.semaphoreImmediateRatio": 3.937622697334654,
+    "lanes.node.switchImmediateRatio": 16.24995026651122
+  }
+}

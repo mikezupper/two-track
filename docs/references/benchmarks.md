@@ -91,9 +91,11 @@ Recorded 2026-10-05, Node 24.15.0, best of 5. Two workloads: *immediate* (200k t
 | `exhaustLane` | ~190 | 0.7x (199,999 of 200k return the shared `Busy`) | ~195 | 1.0x | 296 B |
 | `queueLane` (depth ∞) | ~745 | 2.7x | ~480 | 2.5x | 304 B |
 | `throttle` (controlledClock) | ~855 | 3.1x | ~545 | 2.8x | 1,105 B |
-| `semaphore(16).run` | ~1,980 | **7.2x** | ~1,610 | 8.3x | 2,262 B |
+| `semaphore(16).run` | ~1,980 | **3.9x** (7.2x on 2026-10-05; see note) | ~1,610 | 8.3x | 2,262 B |
 | `debounce` (instantSleeper) | ~7,500 | 27x | ~6,560 | 34x | 2,189 B |
 | `switchLane` | ~9,600 | 36x | ~9,530 | 49x | 2,225 B |
+
+Lane ratios move with machine load more than the other tables: the same semaphore row measured 7.2x on 2026-10-05 and 3.9x on 2026-10-06 (switch 36x → 16x), because the direct-call baseline is ~200 ns and shifts with contention while the lanes' microsecond costs shift less. The `--check` gates (75x / 100x) are set far above either reading; treat the ratios as an order of magnitude, not a constant. The headline semaphore ratio is one of the figures `pnpm bench:record` pins and the invariants check.
 
 Bun 1.3.14 ratios: switch 9.7x / 9.2x, debounce 5.9x / 5.8x, queue 2.4x / 2.2x, throttle 1.8x / 1.6x, exhaust 0.5x / 0.4x, semaphore 5.3x / 4.5x.
 
@@ -134,6 +136,8 @@ These are local CPU and allocation measurements, not network latency improvement
 
 ## Consumer bundles
 
+Headline figures in this file and in README.md are pinned by `docs/references/measurements.json` (`pnpm bench:record`) and checked by the `quoted-measurements` invariant; re-record, then update the tables.
+
 Recorded 2026-10-06 (after decision 0014) with pinned Rolldown 1.2.12 and esbuild 0.28.0. Run `pnpm build && pnpm bench:bundle`. [The script](../../bench/bundles.mjs) bundles small consumer programs as minified ESM, uses the package's normal side-effect metadata, measures raw/gzip/Brotli output, and executes each emitted program to verify behavior. `pnpm check:bundle` enforces budgets for direct imports and full-surface/testing consumers under both bundlers.
 
 esbuild retains namespace members through the root entry. Additive module subpaths let consumers select individual exports:
@@ -141,8 +145,8 @@ esbuild retains namespace members through the root entry. Additive module subpat
 | Consumer | esbuild root namespace | esbuild direct subpath | Direct gzip | Rolldown direct |
 |---|---|---|---|---|
 | Result `ok` + `err` + `andThen` | 1,551 B | 117 B | 116 B | 114 B |
-| struct decoder | 10,590 B | 2,300 B | 1,108 B | 2,286 B |
-| primitive decoder | 10,545 B | 1,038 B | 542 B | 1,026 B |
+| struct decoder | 10,590 B | 2,419 B | 1,154 B | 2,405 B |
+| primitive decoder | 10,545 B | 1,157 B | 586 B | 1,145 B |
 | async interop | 3,280 B | 170 B | 150 B | 176 B |
 | concurrent map | 3,274 B | 733 B | 444 B | 744 B |
 | switch lane | 2,929 B | 731 B | 385 B | 769 B |

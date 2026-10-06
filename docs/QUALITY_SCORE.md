@@ -25,5 +25,5 @@ Graded per module on four axes: **Types** (does the signature say everything), *
 | Invariants coverage | A | source rules + layers + docs integrity + plan shape have negative fixtures; `scripts/invariants.ts` is at ≥98% on every axis with a negative fixture per rule (incl. `architecture-line-counts`); application-level rules in `two-track-check` |
 | CI | A | typecheck, invariants, coverage, lane ratio gates, build, two-bundler budgets, consumer check (TS 6 + 7), checker package, report-only `bench` and `bench:cross`; tag-driven release with provenance |
 | Coverage | A | library 100% lines / 98.3% branches / 99.7% statements (2026-10-06); both packages enforce 95% statements/lines/functions and 90% branches per executable file; generated schedules required for time-dependent exports |
-| Docs freshness | A | links checked by linter; decisions indexed by linter |
+| Docs freshness | A | links, decision index, architecture line counts and headline measurement rows all checked by the invariants script; prose figures by review |
 | Lint (type-aware) | B | `two-track-check` (decision 0010) covers the foot-guns incl. ignored Results; no generic ESLint rules yet |

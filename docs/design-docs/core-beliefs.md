@@ -6,7 +6,7 @@ The operating principles for anyone — human or agent — working in this repos
 
 2. **Keep the algebra in the type checker.** Every guarantee — sum types, exhaustiveness, brands, immutability — is expressed as a type and costs nothing at runtime. A construct that re-pays for a guarantee at runtime (`Object.freeze`, generators for bind, classes for method dispatch) is a measured regression, not a style choice. (Enforced: `no-freeze`, `no-generators`, `no-class`, `bench:check`.)
 
-3. **Measure, then decide.** No performance claim enters a decision record or the README without a benchmark script in `bench/` and a row in `docs/references/benchmarks.md` that says how it was produced. (Reviewer check: every number in the README has a source row.)
+3. **Measure, then decide.** No performance claim enters a decision record or the README without a benchmark script in `bench/` and a row in `docs/references/benchmarks.md` that says how it was produced. (Enforced for the headline rows: `quoted-measurements` compares README/benchmarks tables with `docs/references/measurements.json`; reviewer check for figures in prose.)
 
 4. **Make the fix part of the error.** Lint and structural-test messages end with `— fix: …`, because the reader is usually an agent that will apply it without further context. A rule that cannot say how to comply is not ready to be a rule. (Enforced: `scripts/invariants.ts` message format.)
 

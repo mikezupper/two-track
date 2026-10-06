@@ -126,6 +126,7 @@ console.log(`${runtime}; immediate N=${N_IMMEDIATE.toLocaleString()}, waiting N=
 console.log("debounce coalesces the burst (one run); exhaust/switch admit one run and reject or supersede the rest; the others run every trigger.\n");
 
 let failed = false;
+const recorded: Record<string, number> = {};
 for (const workload of ["immediate", "waiting"] as const) {
   const n = workload === "immediate" ? N_IMMEDIATE : N_WAITING;
   const limit = workload === "immediate" ? LIMIT_IMMEDIATE : LIMIT_WAITING;
@@ -136,6 +137,8 @@ for (const workload of ["immediate", "waiting"] as const) {
     const row = await measure(subject, workload);
     baseline ??= row.ms;
     const ratio = row.ms / baseline;
+    recorded[`${workload}.${row.name}.ratio`] = ratio;
+    recorded[`${workload}.${row.name}.nsPerTrigger`] = (row.ms * 1e6) / n;
     const heap = row.heapPerPending !== undefined ? `  ${row.heapPerPending.toFixed(0).padStart(8)} B` : "";
     console.log(`${row.name.padEnd(34)} ${row.ms.toFixed(1).padStart(9)} ${((row.ms * 1e6) / n).toFixed(0).padStart(11)} ${ratio.toFixed(2).padStart(6)}x ${String(row.okCount).padStart(8)}${heap}`);
     if (check && subject !== subjects[0] && ratio > limit) {
@@ -145,4 +148,6 @@ for (const workload of ["immediate", "waiting"] as const) {
   }
   console.log("");
 }
+// --json: the machine-readable form that scripts/record-measurements.mjs stores in docs/references/measurements.json
+if (process.argv.includes("--json")) console.log(`JSON:${JSON.stringify(recorded)}`);
 if (failed) process.exit(1);

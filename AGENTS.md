@@ -14,6 +14,7 @@
 - In `src/`: no `throw` (except `assertNever`), no `try` (except the four interop edges: `fromThrowable`, `tryPromise`, `D.json`, and the one-time `new Function` probe in `decode-compile`), no `.catch(`, no `any`, no generators, no `Object.freeze`, no classes, no `console`, no `node:` imports, no platform time/random/timers outside `capabilities.ts` (the one documented exception: `withTimeout`'s `setTimeout` in `async.ts`).
 - Layer direction per the `LAYERS` table in `scripts/invariants.ts` and `ARCHITECTURE.md`. New module → register it in both; the module table's line counts are checked against `wc -l` (`architecture-line-counts`).
 - Every export of `src/async.ts`, `src/lanes.ts`, `src/capabilities.ts` appears in `test/<module>.properties.test.ts` (fast-check over generated schedules with `Cap.manualSleeper`/`controlledClock`).
+- Headline figures in README/benchmarks tables match `docs/references/measurements.json` within tolerance (`pnpm bench:record` re-records; then update the tables).
 - Every `docs/` link resolves; every decision file is listed in `docs/design-docs/index.md`; every active plan has `## Progress` and `## Decision log`.
 - Encoding contract: `Result` is `{ ok: true, value } | { ok: false, error }`, `Option` is `{ some: true, value } | { some: false }`. User code narrows on these; do not rename.
 

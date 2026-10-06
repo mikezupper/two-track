@@ -62,7 +62,7 @@ All numbers are from the benchmark scripts in [`bench/`](bench/) on a Linux work
 
 **Encodings of the same railway, one million items**
 
-Consumer bundles are also measured with Rolldown and esbuild (recorded 2026-10-06). Direct subpath imports avoid esbuild retaining an entire namespace: the Result example is **117 bytes minified** and the struct decoder example is **2,300 bytes** (1,124 before the decoder protocol rewrite, which bought 1.2–1.5x speed), versus 1,551 and 10,590 through root namespaces. See [the methods and measurements](docs/references/benchmarks.md#consumer-bundles).
+Consumer bundles are also measured with Rolldown and esbuild (recorded 2026-10-06). Direct subpath imports avoid esbuild retaining an entire namespace: the Result example is **117 bytes minified** and the struct decoder example is **2,419 bytes** (1,124 before the decoder protocol rewrite, which bought 1.2–1.5x speed), versus 1,551 and 10,590 through root namespaces. See [the methods and measurements](docs/references/benchmarks.md#consumer-bundles).
 
 | Encoding | Node 24 | Bun 1.3 |
 |---|---|---|
@@ -524,6 +524,7 @@ This repository is built to be worked on by coding agents with humans steering, 
 - **`docs/` is the system of record.** [Design docs](docs/design-docs/index.md) hold the [core beliefs](docs/design-docs/core-beliefs.md) and one decision record per non-obvious choice, each with its evidence. [Execution plans](docs/exec-plans/) are checked in with progress and decision logs; completed plans stay as history; [tech debt](docs/exec-plans/tech-debt-tracker.md) is tracked next to them. [QUALITY_SCORE.md](docs/QUALITY_SCORE.md) grades each module and names the gaps. [References](docs/references/) hold the benchmark results with their method.
 - **Invariants are enforced mechanically, with remediation in the message.** [`scripts/invariants.ts`](scripts/invariants.ts) checks zero runtime dependencies, banned constructs, layer direction, file size, that every markdown link resolves, that every decision is indexed, and that every active plan has the required sections. Every violation message ends with "fix: …" because the reader is usually an agent that will apply it without further context. The same checks run as a structural test so `pnpm test` fails on drift.
 - **Performance is an invariant, not a hope.** `pnpm bench:check` fails if the library's combinators exceed 4x the inline baseline.
+- **Quoted numbers are checked against a recorded run.** `pnpm bench:record` writes the headline measurements (encodings, decoder comparison, bundle sizes, a lane ratio) to `docs/references/measurements.json`; the invariants script fails if a named table row in this README or the benchmarks file quotes a figure outside tolerance of that run. Re-record, then update the tables, never the reverse. Prose figures outside tables are still reviewed by hand.
 - **Time-dependent code is property-tested, and that is enforced.** Every export of `async`, `lanes` and `capabilities` must appear in its `*.properties.test.ts`, where fast-check drives generated event sequences over `manualSleeper` and `controlledClock` and checks leaks (no pending timers, no abort listeners). A downstream consumer found the retry cancellation bug that this now catches; the write-up is in [docs/exec-plans/completed/0002-downstream-findings.md](docs/exec-plans/completed/0002-downstream-findings.md).
 - **Progressive disclosure.** An agent starts at AGENTS.md, is pointed to ARCHITECTURE.md and the decision index, and reads a reference only when working in that area.
 - **The companion skill is the taste layer.** [two-track-fp-skill](https://github.com/mikezupper/two-track-fp-skill) encodes how application code built on this library should look, with its own hard rules, decision tables, anti-pattern lists, and a mandatory self-review pass.
@@ -546,6 +547,7 @@ pnpm example          # examples/checkout.ts — the worked workflow end to end
 pnpm build            # emits dist/ with declarations and source maps
 pnpm check:tools      # two-track-check: typecheck, tests with coverage, build and self-check (also in check)
 pnpm check:package    # pack + install + import/require + tsc (TS 6 and 7, skipLibCheck false) as a consumer would
+pnpm bench:record     # re-record the headline measurements into docs/references/measurements.json (the invariants check the docs against it)
 pnpm check:lanes      # lane throughput ratio gates against a same-run baseline
 pnpm bench:lanes      # the lane table without gates
 pnpm bench:cross      # decoders vs Zod/Valibot/ArkType, railway vs Ramda/Effect (report only; workspace bench/cross)

@@ -88,6 +88,8 @@ bench("Object.freeze every result", frozen);
 bench("generator do-notation (not shipped)", generator);
 const ratio = lib / base;
 console.log(`\ncombinators / baseline = ${ratio.toFixed(2)}x (limit ${RATIO_LIMIT}x)`);
+// --json: the machine-readable form that scripts/record-measurements.mjs stores in docs/references/measurements.json
+if (process.argv.includes("--json")) console.log(`JSON:${JSON.stringify({ baselineMs: base, combinatorsMs: lib, ratio })}`);
 if (process.argv.includes("--check") && ratio > RATIO_LIMIT) {
   console.error(`FAIL: combinator overhead ${ratio.toFixed(2)}x exceeds ${RATIO_LIMIT}x — fix: remove allocations/closures from the hot path in src/result.ts`);
   process.exit(1);
