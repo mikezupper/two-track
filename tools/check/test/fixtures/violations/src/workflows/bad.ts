@@ -25,6 +25,13 @@ export const asyncForEach = (): void => {
   });
   ids.forEach(async () => step()); // expect: floating-async-callback
 };
+export const promiseValuesNotCalls = async (): Promise<void> => {
+  const p = step();
+  p; // expect: floating-async-result
+  const q = step();
+  await q; // expect: ignored-result
+};
+
 export const asyncMapStatement = async (): Promise<void> => {
   await Async.all(ids.map(() => step())); // expect: ignored-result
 };

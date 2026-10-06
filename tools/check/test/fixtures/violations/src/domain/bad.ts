@@ -70,6 +70,17 @@ export const fineLoops = (): Result<string, number[]> => {
   return ok(out);
 };
 
+export const valuesNotCalls = (s: string): void => {
+  const r = parse(s);
+  r; // expect: ignored-result
+  const rs = [parse(s)];
+  rs; // expect: ignored-result
+  let n = 0;
+  n += 1; // fine: assignment is effect-only
+  n++; // fine
+  void r; // fine: explicit discard
+};
+
 export const hatch = D.unknown; // expect: review-decode-unknown
 export const fallback = (r: Result<string, number>): number => R.unwrapOr(r, 0); // expect: review-unwrap-or
 export const fallbackO = (o: O.Option<number>): number => O.unwrapOr(o, 0); // expect: review-unwrap-or

@@ -26,6 +26,11 @@ All notable changes to `two-track` are recorded here. The format follows Keep a 
 - Packaging: `exports` gained `default` conditions and `./package.json`; declaration files no longer import `.ts` specifiers; `engines.node` is `>=20` for consumers (contributing still needs Node ≥ 22.18 for type stripping); `publishConfig` with provenance and a tag-driven release workflow.
 
 ### Fixed
+- `Lane.semaphore` released no permit when a run threw (a defect turned into a deadlock for every later caller); the permit is released and the rejection re-surfaces.
+- `Async.mapConcurrent` left its outer-signal listener attached and let sibling workers run on when `f` rejected; siblings are now aborted, the listener removed, and the defect rejects the call.
+- `Async.validateConcurrent` kept launching new items after an outer abort; it now stops launching and returns `Aborted` (the union gains `Aborted` only when a `signal` is supplied, as for `mapConcurrent`).
+- `match` / `matchBy` on a tag the type forbids threw `TypeError: cases[value._tag] is not a function`; they now throw a clear defect naming the tag and the known cases.
+- `two-track-check`: `ignored-result` / `floating-async-result` judge an expression statement by its type, so `r;`, `await p;` and `p;` over a stored Result or promise are reported, not only direct calls.
 - Caller cancellation no longer yields an incomplete `mapConcurrent` success; pre-aborted parents propagate to concurrent maps and timeouts, and deadlines still fire if work ignores cancellation.
 - Decoder `__proto__` fields remain ordinary own properties, inherited struct fields are absent, global/sticky patterns are deterministic without mutating caller regexes, and large nested issue lists no longer overflow argument limits.
 - Same-turn switch bursts supersede stale successes; semaphore cancellation between permit acquisition and callback start returns Busy and restores the permit. NaN counts and fractional queue depths obey normalized bounds.

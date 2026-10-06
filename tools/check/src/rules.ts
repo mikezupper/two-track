@@ -300,17 +300,27 @@ const checkNode = (ctx: Ctx, node: ts.Node): void => {
 
   if (ts.isExpressionStatement(node)) {
     const expr = node.expression;
-    if (!ts.isVoidExpression(expr)) {
-      const inner = ts.isAwaitExpression(expr) ? expr.expression : expr;
-      if (ts.isCallExpression(inner) || ts.isNewExpression(inner)) {
-        const type = checker.getTypeAtLocation(expr);
-        if (isResultType(checker, type)) {
-          report(ctx, node, "ignored-result", "error", "Result ignored — the error silently vanishes", "handle it: `const r = ...; if (!r.ok) return r;` or discard explicitly with `void` and a reason comment");
-        } else if (!isPromiseType(checker, type) && containsResult(checker, type)) {
-          report(ctx, node, "ignored-result", "error", "a collection of Results ignored — `map` over a fallible function produced Results nobody inspects", "use R.traverse (first error) or R.validateAll (all errors) and handle the Result, or discard explicitly with `void` and a reason comment");
-        } else if (!ts.isAwaitExpression(expr) && isPromiseType(checker, type)) {
-          report(ctx, node, "floating-async-result", "error", "promise not awaited — its outcome (and any error) is lost", "await it and handle the Result, return it, or discard explicitly with `void` and a reason comment");
-        }
+    // Judge the statement by its TYPE, not its syntax: `await p;` or a bare `r;` where the
+    // value is a Result drops the error just as surely as an ignored call. Only expressions
+    // that exist for their effect are exempt (assignment, void, delete, ++/--, yield).
+    const inner = ts.isAwaitExpression(expr) ? expr.expression : expr;
+    const effectOnly =
+      ts.isVoidExpression(expr) ||
+      ts.isDeleteExpression(inner) ||
+      ts.isPrefixUnaryExpression(inner) ||
+      ts.isPostfixUnaryExpression(inner) ||
+      ts.isYieldExpression(inner) ||
+      (ts.isBinaryExpression(inner) && inner.operatorToken.kind >= ts.SyntaxKind.FirstAssignment && inner.operatorToken.kind <= ts.SyntaxKind.LastAssignment);
+    if (!effectOnly) {
+      const type = checker.getTypeAtLocation(expr);
+      const isCall = ts.isCallExpression(inner) || ts.isNewExpression(inner);
+      const what = isCall ? "" : " (a value, not a call — it was computed earlier and never inspected)";
+      if (isResultType(checker, type)) {
+        report(ctx, node, "ignored-result", "error", `Result ignored${what} — the error silently vanishes`, "handle it: `const r = ...; if (!r.ok) return r;` or discard explicitly with `void` and a reason comment");
+      } else if (!isPromiseType(checker, type) && containsResult(checker, type)) {
+        report(ctx, node, "ignored-result", "error", `a collection of Results ignored${what} — \`map\` over a fallible function produced Results nobody inspects`, "use R.traverse (first error) or R.validateAll (all errors) and handle the Result, or discard explicitly with `void` and a reason comment");
+      } else if (!ts.isAwaitExpression(expr) && isPromiseType(checker, type)) {
+        report(ctx, node, "floating-async-result", "error", `promise not awaited${what} — its outcome (and any error) is lost`, "await it and handle the Result, return it, or discard explicitly with `void` and a reason comment");
       }
     }
   }

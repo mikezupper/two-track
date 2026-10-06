@@ -139,8 +139,18 @@ export async function mapConcurrent<E, A, B>(
     }
   };
 
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  // A rejecting `f` is a defect (a railway promise never rejects), but a defect must not
+  // leak the outer-signal listener or leave sibling workers running: abort them, clean up,
+  // then surface the defect to the caller as a rejection.
+  let defect: { readonly thrown: unknown } | undefined;
+  const guarded = (): Promise<void> =>
+    worker().then(undefined, (thrown: unknown) => {
+      defect ??= { thrown };
+      controller.abort();
+    });
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, guarded));
   options.signal?.removeEventListener("abort", onOuterAbort);
+  if (defect !== undefined) return Promise.reject(defect.thrown);
   return failure ?? (controller.signal.aborted ? ABORTED : ok(out));
 }
 
@@ -148,18 +158,37 @@ export async function mapConcurrent<E, A, B>(
  * Like `mapConcurrent` but never stops early: runs everything and reports
  * all errors (or all values). Use for batch jobs and input validation.
  */
-export const validateConcurrent = async <E, A, B>(
+export function validateConcurrent<E, A, B>(
+  items: ReadonlyArray<A>,
+  f: (item: A, index: number, signal: AbortSignal) => AsyncResult<E, B> | Result<E, B>,
+  options: ConcurrencyOptions & { readonly signal: AbortSignal },
+): AsyncResult<NonEmptyArray<E> | Aborted, B[]>;
+export function validateConcurrent<E, A, B>(
+  items: ReadonlyArray<A>,
+  f: (item: A, index: number, signal: AbortSignal) => AsyncResult<E, B> | Result<E, B>,
+  options: ConcurrencyOptions & { readonly signal?: undefined },
+): AsyncResult<NonEmptyArray<E>, B[]>;
+export function validateConcurrent<E, A, B>(
   items: ReadonlyArray<A>,
   f: (item: A, index: number, signal: AbortSignal) => AsyncResult<E, B> | Result<E, B>,
   options: ConcurrencyOptions,
-): AsyncResult<NonEmptyArray<E>, B[]> => {
+): AsyncResult<NonEmptyArray<E> | Aborted, B[]>;
+export async function validateConcurrent<E, A, B>(
+  items: ReadonlyArray<A>,
+  f: (item: A, index: number, signal: AbortSignal) => AsyncResult<E, B> | Result<E, B>,
+  options: ConcurrencyOptions,
+): AsyncResult<NonEmptyArray<E> | Aborted, B[]> {
+  // "Run everything" means every item gets its turn despite failures — not that work keeps
+  // starting after the caller cancelled. After an outer abort no new item starts, in-flight
+  // items finish on their own, and the outcome is Aborted (there is no complete report to give).
+  if (options.signal?.aborted === true) return ABORTED;
   const limit = Math.max(1, Math.floor(options.concurrency) || 1);
   const signal = options.signal ?? new AbortController().signal;
   const values = new Array<B>(items.length);
   let failures: Array<Err<E> | undefined> | undefined;
   let next = 0;
   const worker = async (): Promise<void> => {
-    while (next < items.length) {
+    while (next < items.length && !signal.aborted) {
       const index = next++;
       const result = await f(items[index] as A, index, signal);
       if (result.ok) values[index] = result.value;
@@ -167,6 +196,7 @@ export const validateConcurrent = async <E, A, B>(
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  if (signal.aborted && next < items.length) return ABORTED;
   if (failures === undefined) return ok(values);
   const errors: E[] = [];
   for (let i = 0; i < failures.length; i++) {
@@ -174,7 +204,7 @@ export const validateConcurrent = async <E, A, B>(
     if (result !== undefined) errors.push(result.error);
   }
   return err(errors as unknown as NonEmptyArray<E>);
-};
+}
 
 /** Sequence promises of Results (already started). First error wins; order preserved. */
 export const all = async <E, A>(promises: ReadonlyArray<AsyncResult<E, A>>): AsyncResult<E, A[]> => {

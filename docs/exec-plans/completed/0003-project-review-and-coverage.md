@@ -18,6 +18,10 @@ Review the library, checker, supporting scripts, and tests; verify all project c
 - [x] 2026-10-05 Measured compiled decoder/async snapshots and Rolldown/esbuild consumers; removed unnecessary allocations and added smaller direct module imports with budget checks.
 - [x] 2026-10-05 Complete check passed: 180 root tests, 39 checker tests, coverage, package/consumer checks, bundle budgets and encoding ratio 1.79x. Repeated properties with 300 generated cases and a fixed seed. Recorded [the review](../../references/project-review.md) and [measurements](../../references/benchmarks.md).
 
+## Follow-up (2026-10-05, same day): the five findings the review left open
+
+Verified open by probe after the review commit, then closed with tests in `test/defects.test.ts` and the checker fixtures: semaphore permit leak on a throwing run; `mapConcurrent` outer-listener leak and running siblings on a rejecting `f`; `validateConcurrent` launching after an outer abort (now `Aborted`, signal-only overload); `match`/`matchBy` unknown-tag `TypeError`; checker must-use rules limited to call expressions (now by type: `r;`, `await p;`, `p;`).
+
 ## Decision log
 - 2026-10-05 — Review includes the separate `tools/check` package and supporting scripts because the requested scope is the whole project. Coverage will be measured from fresh runs, not the existing ignored report.
 - 2026-10-05 — User expanded the review to performance bottlenecks and bundle size; preserve correctness fixes and compare optimized code against measured baselines.

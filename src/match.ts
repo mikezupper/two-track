@@ -12,8 +12,11 @@ export type Cases<T extends { readonly _tag: string }, R> = {
 };
 
 /** Exhaustive match on the `_tag` discriminant. */
-export const match = <T extends { readonly _tag: string }, R>(value: T, cases: Cases<T, R>): R =>
-  (cases[value._tag as T["_tag"]] as (v: T) => R)(value);
+export const match = <T extends { readonly _tag: string }, R>(value: T, cases: Cases<T, R>): R => {
+  const handler = cases[value._tag as T["_tag"]] as ((v: T) => R) | undefined;
+  if (handler === undefined) return noCase("_tag", value._tag, Object.keys(cases));
+  return handler(value);
+};
 
 export type CasesBy<Key extends string, T extends { readonly [K in Key]: string }, R> = {
   readonly [V in T[Key]]: (value: Extract<T, { readonly [K in Key]: V }>) => R;
@@ -24,7 +27,20 @@ export const matchBy = <Key extends string, T extends { readonly [K in Key]: str
   key: Key,
   value: T,
   cases: CasesBy<Key, T, R>,
-): R => (cases[value[key] as T[Key]] as (v: T) => R)(value);
+): R => {
+  const handler = cases[value[key] as T[Key]] as ((v: T) => R) | undefined;
+  if (handler === undefined) return noCase(key, value[key], Object.keys(cases));
+  return handler(value);
+};
+
+/**
+ * A value reached `match` with a tag the type says it cannot have. The types were lied to
+ * at a boundary (data that was not decoded), so this is a defect with a clear message, not
+ * a `TypeError: cases[value._tag] is not a function` three frames away.
+ */
+const noCase = (key: string, tag: unknown, known: ReadonlyArray<string>): never => {
+  throw new Error(`[two-track] match: no case for ${key} ${JSON.stringify(tag)} (cases: ${known.join(", ")}) — the value did not come through a decoder`);
+};
 
 /**
  * The one sanctioned defect. Place it in the `default` of a `switch` over a

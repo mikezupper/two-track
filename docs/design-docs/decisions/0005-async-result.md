@@ -35,6 +35,10 @@ Asynchronous railways can be a lazy `Task`/`Future` type (Fluture, fp-ts `TaskEi
 
 See [review regressions](../../../test/async.properties.test.ts) for generated cancellation cases and the deterministic deadline regression.
 
+## Amendment (2026-10-05, follow-up)
+
+`validateConcurrent` follows `mapConcurrent`: an already-aborted or later-aborted caller signal stops new items from starting and yields `Aborted`; the union widens only when a `signal` is passed. A rejecting `f` in `mapConcurrent` is still a defect, but it now aborts sibling workers and removes the outer listener before rejecting, so a defect cannot leak.
+
 ## Consequences
 
 - `no-catch-method` invariant; `.then(ok, onRejected)` is the internal idiom.

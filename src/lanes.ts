@@ -283,10 +283,17 @@ export const semaphore = (permits: number, options: LaneOptions = {}): Semaphore
         unlink();
         return BUSY;
       }
-      const result = await f(controller.signal);
+      // A throwing `f` is a defect, but a defect must not leak the permit — that would turn
+      // one bug into a deadlock for every later caller. Settle either way, then re-surface.
+      const settled = await Promise.resolve()
+        .then(() => f(controller.signal))
+        .then(
+          (result) => ({ ok: true as const, result }),
+          (thrown: unknown) => ({ ok: false as const, thrown }),
+        );
       release();
       unlink();
-      return result;
+      return settled.ok ? settled.result : Promise.reject(settled.thrown);
     },
   };
 };
