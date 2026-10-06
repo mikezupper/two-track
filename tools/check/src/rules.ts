@@ -251,6 +251,8 @@ const checkNode = (ctx: Ctx, node: ts.Node): void => {
       if (calleeIs(callee, "Date", "now")) report(ctx, node, "no-platform-calls", "error", "`Date.now()` outside infra/", "take a Cap.Clock capability (deps.clock.now()) so the domain stays pure and testable");
       else if (calleeIs(callee, "Math", "random")) report(ctx, node, "no-platform-calls", "error", "`Math.random()` outside infra/", "take a Cap.Random capability (deps.random.next())");
       else if (ts.isPropertyAccessExpression(callee) && callee.name.text === "randomUUID") report(ctx, node, "no-platform-calls", "error", "`randomUUID()` outside infra/", "take a Cap.IdGen capability (deps.ids.next())");
+      else if (ts.isPropertyAccessExpression(callee) && callee.name.text === "getRandomValues") report(ctx, node, "no-platform-calls", "error", "`getRandomValues()` outside infra/", "take a Cap.Random capability, or do it in infra/");
+      else if (calleeIs(callee, "performance", "now")) report(ctx, node, "no-platform-calls", "error", "`performance.now()` outside infra/", "take a Cap.Clock capability (deps.clock.now()); a monotonic clock is still a clock");
       else if (ts.isIdentifier(callee) && (callee.text === "setTimeout" || callee.text === "setInterval")) report(ctx, node, "no-platform-calls", "error", `\`${callee.text}\` outside infra/`, "take a Cap.Sleeper capability, or use Async.retry/withTimeout/Lane helpers which do");
       else if (ts.isIdentifier(callee) && callee.text === "fetch") report(ctx, node, "no-platform-calls", "error", "`fetch` outside infra/", "put the HTTP call behind a port interface implemented in infra/ with Async.tryPromise");
     }

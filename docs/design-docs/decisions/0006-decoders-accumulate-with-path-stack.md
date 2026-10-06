@@ -25,6 +25,13 @@ Containers (`struct`, `array`, `record`) run every child and collect every issue
 
 Object decoding reads own fields; declared or record `__proto__` keys remain ordinary own data properties on a normal output object. `pattern` owns its RegExp and resets its index before testing, preserving the caller's state and making global/sticky patterns deterministic. Issue concatenation uses a bounded loop rather than argument spread, which formerly overflowed on large nested failures. `oneOf` allocates its fallback issue only for an empty alternative list. These behaviors are covered by [boundary regressions](../../../test/review-regressions.test.ts).
 
+## Amendment (2026-10-05, removing two surprises)
+
+Two behaviours were correct as documented but contradicted their names, which is a defect in an API whose point is that the type and the name are the contract:
+
+- `isoDate` accepted the engine's whole `Date` grammar and silently normalized `2023-02-30`. It is now strict ISO-8601 with calendar and range validation, and rejects offset-less date-times as ambiguous on the wire. The permissive parser survives under the honest name `dateFromString`. This matches Zod's `z.iso.datetime()` and Valibot's `isoTimestamp` in spirit; Effect's `Schema.Date` and io-ts's `DateFromISOString` are permissive, and that permissiveness is exactly what produced the surprise.
+- `oneOf` reported only the last alternative's issues. It now reports all of them with an `alternative N:` prefix, the same accumulate-everything rule as `struct`, matching what Zod's union `unionErrors` and Valibot's `union` issues expose. `taggedUnion` remains the precise tool when a discriminant exists.
+
 ## Consequences
 
 - `D.optional` is a marker read by `struct` so absent keys become `?:` in the inferred type.

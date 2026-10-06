@@ -33,7 +33,7 @@ describe("primitive decoders", () => {
     expect(D.andThen(D.string, (s) => (s === "x" ? err("no x") : ok(s))).decode("x")).toMatchObject({ ok: false });
     expect(D.andThen(D.string, (s) => ok(s.toUpperCase())).decode("x")).toEqual(ok("X"));
     expect(D.isoDate.decode("2026-10-05T00:00:00Z")).toEqual(ok(new Date("2026-10-05T00:00:00Z")));
-    expect(issues(D.isoDate.decode("not a date"))).toEqual(["|expected ISO-8601 date string"]);
+    expect(issues(D.isoDate.decode("not a date"))).toEqual(["|expected ISO-8601 date (YYYY-MM-DD) or date-time with Z/±HH:mm offset"]);
     expect(D.custom((u): u is bigint => typeof u === "bigint", "bigint").decode(1n)).toEqual(ok(1n));
     expect(issues(D.custom((u): u is bigint => typeof u === "bigint", "bigint").decode(1))).toEqual(["|expected bigint"]);
   });
@@ -108,12 +108,53 @@ describe("containers", () => {
     expect(issues(Shape.decode(1))).toEqual(["|expected object"]);
   });
 
-  it("oneOf tries alternatives in order", () => {
+  it("oneOf tries alternatives in order and reports every alternative's issues on failure", () => {
     const d = D.oneOf(D.number, D.literal("n/a"));
     expect(d.decode(1)).toEqual(ok(1));
     expect(d.decode("n/a")).toEqual(ok("n/a"));
-    expect(issues(d.decode(true))).toEqual(['|expected one of "n/a"']);
+    expect(issues(d.decode(true))).toEqual(["|alternative 1: expected finite number", '|alternative 2: expected one of "n/a"']);
     expect(issues(D.oneOf().decode(1))).toEqual(["|expected one of the alternatives"]);
+    const nested = D.oneOf(D.struct({ a: D.number }), D.struct({ b: D.string }));
+    expect(issues(nested.decode({ a: "x", b: 1 }))).toEqual(["a|alternative 1: expected finite number", "b|alternative 2: expected string"]);
+  });
+
+  it("isoDate is strict ISO-8601 with calendar validation; dateFromString is the engine's permissive grammar", () => {
+    const okDates = ["2024-02-29", "2026-10-05T12:34Z", "2026-10-05T12:34:56Z", "2026-10-05T12:34:56.789Z", "2026-10-05T12:34:56.123456789Z", "2026-10-05T12:34:56+05:30", "2026-10-05T23:59:59-11:00"];
+    for (const s of okDates) {
+      const r = D.isoDate.decode(s);
+      expect(r.ok, s).toBe(true);
+      if (r.ok) expect(r.value.getTime(), s).toBe(new Date(s.replace(/\.(\d{3})\d+/, ".$1")).getTime());
+    }
+    expect(D.isoDate.decode("2026-10-05")).toEqual(ok(new Date("2026-10-05T00:00:00Z")));
+    const bad: Array<[string, string]> = [
+      ["2023-02-30", "expected a valid calendar date"],
+      ["2023-02-29", "expected a valid calendar date"],
+      ["2023-04-31", "expected a valid calendar date"],
+      ["2023-13-01", "expected a valid calendar date"],
+      ["2023-00-10", "expected a valid calendar date"],
+      ["2026-10-05T24:00:00Z", "expected a valid time of day"],
+      ["2026-10-05T12:60:00Z", "expected a valid time of day"],
+      ["2026-10-05T12:00:60Z", "expected a valid time of day"],
+      ["2026-10-05T12:00:00+24:00", "expected a valid UTC offset"],
+      ["2026-10-05T12:00:00", "expected ISO-8601 date (YYYY-MM-DD) or date-time with Z/±HH:mm offset"],
+      ["March 5, 2020", "expected ISO-8601 date (YYYY-MM-DD) or date-time with Z/±HH:mm offset"],
+      ["2026-10-05 12:00:00Z", "expected ISO-8601 date (YYYY-MM-DD) or date-time with Z/±HH:mm offset"],
+      ["20261005", "expected ISO-8601 date (YYYY-MM-DD) or date-time with Z/±HH:mm offset"],
+    ];
+    for (const [s, message] of bad) expect(issues(D.isoDate.decode(s)), s).toEqual([`|${message}`]);
+    // the permissive decoder is explicit about being permissive
+    expect(D.dateFromString.decode("March 5, 2020").ok).toBe(true);
+    expect(D.dateFromString.decode("2023-02-30").ok).toBe(true); // normalized by the engine — that is why it is not isoDate
+    expect(issues(D.dateFromString.decode("nope"))).toEqual(["|expected a date string"]);
+  });
+
+  it("isoDate round-trips every Date (property)", () => {
+    fc.assert(
+      fc.property(fc.date({ min: new Date("0001-01-01T00:00:00Z"), max: new Date("9999-12-31T23:59:59.999Z"), noInvalidDate: true }), (d) => {
+        const r = D.isoDate.decode(d.toISOString());
+        return r.ok && r.value.getTime() === d.getTime();
+      }),
+    );
   });
 
   it("json parses then decodes", () => {

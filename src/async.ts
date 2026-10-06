@@ -219,7 +219,11 @@ export const all = async <E, A>(promises: ReadonlyArray<AsyncResult<E, A>>): Asy
 };
 
 export type RetryPolicy<E> = {
-  /** Total attempts including the first. */
+  /**
+   * Total attempts including the first. `Infinity` is allowed and means "until success,
+   * a non-retriable error, or an abort" — always pair it with a `signal` so shutdown can
+   * stop it. Non-finite or sub-1 values other than Infinity are treated as 1.
+   */
   readonly attempts: number;
   /** Delay before attempt n (1-based retry index). Use `backoff(...)`. */
   readonly delay: (retry: number) => number;

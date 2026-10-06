@@ -17,6 +17,9 @@ All notable changes to `two-track` are recorded here. The format follows Keep a 
 - `two-track-check` (decision 0010), a separate dev-time CLI in `tools/check` with the type-aware `ignored-result` / `floating-async-result` / `ignored-result-in-callback` / `floating-async-callback` rules (including Results dropped by `forEach` callbacks and arrays of Results from `map`), banned-construct, layer-direction, brand-cast and concurrency-hygiene rules, and `review`-severity reports for `unwrapOr` / `D.unknown`.
 
 ### Changed
+- `D.isoDate` is now strict ISO-8601: `YYYY-MM-DD`, or a date-time with `Z`/`±HH:mm`; calendar-invalid dates (`2023-02-30`), times out of range, and offset-less date-times are rejected. The previous engine-grammar behaviour is available, explicitly named, as `D.dateFromString`.
+- `D.oneOf` reports every alternative's issues on failure, each prefixed `alternative N:`, instead of only the last alternative's.
+- `two-track-check` `no-platform-calls` also reports `performance.now()` and `crypto.getRandomValues()`.
 - `pnpm check` now enforces coverage per file, bundle budgets, and the separate checker package's full check. Both packages require 95% statements/lines/functions and 90% branches per executable file.
 - `Async.mapConcurrent` adds `Aborted` to cancellable calls' error unions; typed options and retry policies with optional signals are accepted.
 - `oneOf` skips its eager failure allocation, concurrent validation writes directly into its final success array and creates failure storage only on demand, and lane signal linking avoids temporary arrays.

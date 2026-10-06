@@ -136,11 +136,7 @@ Effect's third type parameter tracks dependencies in the signature. Without a ru
 
 `typescript-eslint` does not support the TypeScript 7.0 native compiler, and the two-compiler workaround was judged not worth its complexity. Type-level enforcement comes from `tsc` with every strict flag on. Architectural and taste enforcement comes from [`scripts/invariants.ts`](scripts/invariants.ts), a custom linter whose every message ends with the fix, run both as a script and as a structural test. Revisit when typescript-eslint supports TS ≥ 7.1 (tracked in [docs/exec-plans/tech-debt-tracker.md](docs/exec-plans/tech-debt-tracker.md)).
 
-### Decision 8: Data-first functions, namespaced by module (see below), then three that followed from use
-
-Decisions 9–11 are summarized after Decision 8.
-
-### Decision 8 (continued): Data-first functions, namespaced by module
+### Decision 8: Data-first functions, namespaced by module
 
 Every combinator takes the data as its first argument: `R.map(result, f)`, not `map(f)(result)`. Data-first infers types in one pass and allocates no intermediate closures. Point-free, data-last style is deliberately not supported; the measured cost of currying is where Ramda's 20x comes from. Functions are grouped in namespaces (`R`, `O`, `D`, `Async`, `Cap`) so `R.map` and `O.map` coexist, while the constructors you write constantly (`ok`, `err`, `some`, `none`, `match`, `tagged`, `pipe`) are top-level exports.
 
@@ -265,7 +261,7 @@ if (!r.ok) return respond(400, D.formatIssues(r.error));
 // r.value.email is Brand<string, "Email">; nothing downstream re-checks it
 ```
 
-Decoders accumulate every issue in a struct or array with its path (`lines.1.qty: expected >= 1`), because boundaries should report all problems at once. The decoder is the smart constructor: `D.brand` is the one place a brand is applied, and it sits behind the checks that justify it. `D.taggedUnion("kind", {...})` decodes discriminated unions by picking the variant; `D.json` parses and decodes in one step; `D.lazy` handles recursive shapes; `D.custom` wraps any type guard.
+Decoders accumulate every issue in a struct or array with its path (`lines.1.qty: expected >= 1`), because boundaries should report all problems at once. The decoder is the smart constructor: `D.brand` is the one place a brand is applied, and it sits behind the checks that justify it. `D.taggedUnion("kind", {...})` decodes discriminated unions by picking the variant and reports only that branch's issues; `D.oneOf(...)` tries alternatives and, on failure, reports every alternative's issues prefixed `alternative N:`; `D.json` parses and decodes in one step; `D.lazy` handles recursive shapes; `D.custom` wraps any type guard. Names are contracts: `D.isoDate` accepts strict ISO-8601 only (date, or date-time with an offset) and rejects calendar-invalid dates, while `D.dateFromString` is the engine's permissive grammar under a name that says so.
 
 ### Tagged errors and exhaustive matching
 
@@ -451,7 +447,6 @@ Stated plainly, because a library that hides its limits is a library that gets m
 | Enforced purity | The compiler cannot see effects | Capabilities by convention, plus lint on `Date.now`/`Math.random`/timers/`console` in domain code |
 | Higher-kinded abstraction (one `map` over Result, Option, Array) | TypeScript has no HKTs; neither does Rust | Concrete `R.map`, `O.map`, `Array.prototype.map` |
 | Runtime immutability | 10–20x measured cost of `Object.freeze` | `readonly` types; freeze fixtures in tests only |
-| Strict ISO date syntax in `D.isoDate` | It currently uses the engine's Date parser, which also accepts other formats | Refine the wire string to your required format before applying `D.isoDate`; tracked in tech debt |
 | Automatic retries, caching, metrics, tracing | Not a runtime concern this library owns | Thin helpers (`Async.retry`, `withTimeout`); observability belongs to your shell |
 
 Compared with **neverthrow**: same idea, similar speed for the fluent style, but neverthrow ships classes with methods (2–3x) and `safeTry` generators (80x) as the recommended idioms, and it has no decoders, capabilities, or concurrency helpers. Compared with **Effect**: Effect gives you everything in the left column above, with a correctness story this library cannot match, at ~100x on CPU-bound paths and with a learning curve; choose Effect when the dependency graph, concurrency, or interruption semantics are the hard part of your system. Compared with **Rust**: Rust enforces what this library can only check; choose Rust when the compiler must be the gatekeeper or when throughput matters more than the JavaScript ecosystem. Compared with **Ramda**: Ramda is a transformation vocabulary, not a railway, and its currying costs 20x; this library does not support point-free style on purpose.

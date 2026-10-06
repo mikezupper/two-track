@@ -32,7 +32,11 @@ const cases = {
 };
 const work = mkdtempSync(join(tmpdir(), "two-track-bundles-"));
 const sizes = {};
-const budgets = { resultDirect: 160, decoderDirect: 1250, primitiveDirect: 350, interopDirect: 220, concurrentDirect: 800, switchDirect: 900, full: 15_000, testing: 1600 };
+// `full` was raised from 15,000 to 16,000 on 2026-10-05 when `isoDate` became strict ISO-8601 with
+// calendar validation and `oneOf` started reporting every alternative's issues (~1 kB of real
+// behaviour). Selective consumers did not move; the full-surface budget is a regression tripwire,
+// not a target.
+const budgets = { resultDirect: 160, decoderDirect: 1250, primitiveDirect: 350, interopDirect: 220, concurrentDirect: 800, switchDirect: 900, full: 16_000, testing: 1600 };
 try {
   for (const [name, code] of Object.entries(cases)) {
     const input = join(work, `${name}.mjs`);
