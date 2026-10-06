@@ -1,8 +1,11 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { defaultConfig, globToRegExp, layerOf, loadConfig, matchesAny } from "../src/config.ts";
+
+const dirs: string[] = [];
+afterEach(() => { for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true }); });
 
 describe("glob matching", () => {
   it("handles **, *, prefixes and exact files", () => {
@@ -25,8 +28,16 @@ describe("glob matching", () => {
 });
 
 describe("loadConfig", () => {
+  it.each([null, [], 1, { layers: [] }, { layers: null }, { layers: "src" }, { layers: { domain: [1] } }, { include: [1] }])("rejects invalid shape %j", (raw) => {
+    const dir = mkdtempSync(join(tmpdir(), "ttc-config-"));
+    dirs.push(dir);
+    writeFileSync(join(dir, "two-track-check.json"), JSON.stringify(raw));
+    expect(loadConfig(dir)).toMatchObject({ ok: false, error: expect.stringContaining("— fix:") });
+  });
+
   it("defaults when absent, merges when present, rejects bad shapes with a fix", () => {
     const dir = mkdtempSync(join(tmpdir(), "ttc-"));
+    dirs.push(dir);
     expect(loadConfig(dir)).toMatchObject({ ok: true, source: "defaults" });
     writeFileSync(join(dir, "two-track-check.json"), JSON.stringify({ layers: { domain: ["lib/domain"] }, brandFiles: ["**/b.ts"] }));
     const merged = loadConfig(dir);

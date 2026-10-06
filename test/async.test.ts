@@ -45,6 +45,12 @@ describe("AsyncResult basics", () => {
 });
 
 describe("mapConcurrent", () => {
+  it("NaN concurrency still processes every item, and NaN attempts runs once", async () => {
+    expect(await Async.mapConcurrent([1, 2], ok, { concurrency: Number.NaN })).toEqual(ok([1, 2]));
+    expect(await Async.validateConcurrent([1, 2], ok, { concurrency: Number.NaN })).toEqual(ok([1, 2]));
+    expect(await Async.retry(() => ok(1), { attempts: Number.NaN, delay: () => 0, retriable: () => true })).toEqual(ok(1));
+  });
+
   it("bounds concurrency and preserves order", async () => {
     let inFlight = 0;
     let peak = 0;
@@ -95,6 +101,14 @@ describe("mapConcurrent", () => {
 });
 
 describe("validateConcurrent", () => {
+  it("retains undefined errors in input order when work settles out of order", async () => {
+    const result = await Async.validateConcurrent([0, 1, 2], async (n) => {
+      await later(undefined, 2 - n);
+      return n === 1 ? err(undefined) : err(n);
+    }, { concurrency: 3 });
+    expect(result).toEqual(err([0, undefined, 2]));
+  });
+
   it("runs everything and reports all errors", async () => {
     const r = await Async.validateConcurrent([1, 2, 3, 4], async (n) => (n % 2 === 0 ? err(n) : ok(n)), { concurrency: 3 });
     expect(r).toEqual(err([2, 4]));

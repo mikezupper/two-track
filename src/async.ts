@@ -12,14 +12,14 @@
 
 import type { Sleeper } from "./capabilities.ts";
 import { systemSleeper } from "./capabilities.ts";
-import type { NonEmptyArray, Result } from "./result.ts";
+import type { Err, NonEmptyArray, Result } from "./result.ts";
 import { err, ok } from "./result.ts";
 import { tagged } from "./tagged.ts";
 
-/** Cancellation outcome of `retry` when a `RetryPolicy.signal` aborts before or between attempts. */
-export const Aborted = tagged("Aborted")();
+/** Cancellation outcome when a concurrent map or a retry is stopped by its caller. */
+export const Aborted = /* @__PURE__ */ tagged("Aborted")();
 export type Aborted = ReturnType<typeof Aborted>;
-const ABORTED: Result<Aborted, never> = err(Aborted({}));
+const ABORTED: Result<Aborted, never> = /* @__PURE__ */ err(Aborted({}));
 
 export type AsyncResult<E, A> = Promise<Result<E, A>>;
 
@@ -95,13 +95,31 @@ export type ConcurrencyOptions = {
  * Apply an async fallible function to every item with bounded concurrency.
  * Fail-fast: on the first error no new work starts and in-flight work is
  * signalled to abort; the first error is returned. Results keep input order.
+ * A caller's abort returns Aborted rather than an incomplete success array.
+ * Calls with no signal retain E as their error type.
  */
-export const mapConcurrent = async <E, A, B>(
+export function mapConcurrent<E, A, B>(
+  items: ReadonlyArray<A>,
+  f: (item: A, index: number, signal: AbortSignal) => AsyncResult<E, B> | Result<E, B>,
+  options: ConcurrencyOptions & { readonly signal: AbortSignal },
+): AsyncResult<E | Aborted, B[]>;
+export function mapConcurrent<E, A, B>(
+  items: ReadonlyArray<A>,
+  f: (item: A, index: number, signal: AbortSignal) => AsyncResult<E, B> | Result<E, B>,
+  options: ConcurrencyOptions & { readonly signal?: undefined },
+): AsyncResult<E, B[]>;
+export function mapConcurrent<E, A, B>(
   items: ReadonlyArray<A>,
   f: (item: A, index: number, signal: AbortSignal) => AsyncResult<E, B> | Result<E, B>,
   options: ConcurrencyOptions,
-): AsyncResult<E, B[]> => {
-  const limit = Math.max(1, Math.floor(options.concurrency));
+): AsyncResult<E | Aborted, B[]>;
+export async function mapConcurrent<E, A, B>(
+  items: ReadonlyArray<A>,
+  f: (item: A, index: number, signal: AbortSignal) => AsyncResult<E, B> | Result<E, B>,
+  options: ConcurrencyOptions,
+): AsyncResult<E | Aborted, B[]> {
+  if (options.signal?.aborted === true) return ABORTED;
+  const limit = Math.max(1, Math.floor(options.concurrency) || 1);
   const controller = new AbortController();
   const onOuterAbort = (): void => controller.abort();
   options.signal?.addEventListener("abort", onOuterAbort, { once: true });
@@ -123,8 +141,8 @@ export const mapConcurrent = async <E, A, B>(
 
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
   options.signal?.removeEventListener("abort", onOuterAbort);
-  return failure ?? ok(out);
-};
+  return failure ?? (controller.signal.aborted ? ABORTED : ok(out));
+}
 
 /**
  * Like `mapConcurrent` but never stops early: runs everything and reports
@@ -135,25 +153,27 @@ export const validateConcurrent = async <E, A, B>(
   f: (item: A, index: number, signal: AbortSignal) => AsyncResult<E, B> | Result<E, B>,
   options: ConcurrencyOptions,
 ): AsyncResult<NonEmptyArray<E>, B[]> => {
-  const limit = Math.max(1, Math.floor(options.concurrency));
+  const limit = Math.max(1, Math.floor(options.concurrency) || 1);
   const signal = options.signal ?? new AbortController().signal;
-  const results = new Array<Result<E, B>>(items.length);
+  const values = new Array<B>(items.length);
+  let failures: Array<Err<E> | undefined> | undefined;
   let next = 0;
   const worker = async (): Promise<void> => {
     while (next < items.length) {
       const index = next++;
-      results[index] = await f(items[index] as A, index, signal);
+      const result = await f(items[index] as A, index, signal);
+      if (result.ok) values[index] = result.value;
+      else (failures ??= new Array(items.length))[index] = result;
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  const values: B[] = [];
+  if (failures === undefined) return ok(values);
   const errors: E[] = [];
-  for (let i = 0; i < results.length; i++) {
-    const r = results[i] as Result<E, B>;
-    if (r.ok) values.push(r.value);
-    else errors.push(r.error);
+  for (let i = 0; i < failures.length; i++) {
+    const result = failures[i];
+    if (result !== undefined) errors.push(result.error);
   }
-  return errors.length === 0 ? ok(values) : err(errors as unknown as NonEmptyArray<E>);
+  return err(errors as unknown as NonEmptyArray<E>);
 };
 
 /** Sequence promises of Results (already started). First error wins; order preserved. */
@@ -203,13 +223,17 @@ export function retry<E, A>(
   run: (attempt: number, signal: AbortSignal) => AsyncResult<E, A> | Result<E, A>,
   policy: RetryPolicy<E> & { readonly signal?: undefined },
 ): AsyncResult<E, A>;
+export function retry<E, A>(
+  run: (attempt: number, signal: AbortSignal) => AsyncResult<E, A> | Result<E, A>,
+  policy: RetryPolicy<E>,
+): AsyncResult<E | Aborted, A>;
 export async function retry<E, A>(
   run: (attempt: number, signal: AbortSignal) => AsyncResult<E, A> | Result<E, A>,
   policy: RetryPolicy<E>,
 ): AsyncResult<E | Aborted, A> {
   const sleeper = policy.sleeper ?? systemSleeper;
   const signal = policy.signal ?? new AbortController().signal;
-  const attempts = Math.max(1, Math.floor(policy.attempts));
+  const attempts = Math.max(1, Math.floor(policy.attempts) || 1);
   let last: Result<E, A> | undefined;
   for (let attempt = 1; attempt <= attempts; attempt++) {
     if (signal.aborted) return ABORTED;
@@ -252,16 +276,17 @@ export const withTimeout = async <E, A, E2>(
   const controller = new AbortController();
   const onParentAbort = (): void => controller.abort();
   parent?.addEventListener("abort", onParentAbort, { once: true });
-  let timedOut = false;
+  if (parent?.aborted === true) controller.abort();
+  let resolveDeadline: (result: Result<E2, never>) => void;
+  const deadline = new Promise<Result<E2, never>>((resolve) => {
+    resolveDeadline = resolve;
+  });
   const timer = setTimeout(() => {
-    timedOut = true;
+    // Resolve independently of abort events: an already-aborted controller
+    // emits no second event when the deadline fires.
+    resolveDeadline(err(onTimeout()));
     controller.abort();
   }, ms);
-  const deadline = new Promise<Result<E2, never>>((resolve) => {
-    controller.signal.addEventListener("abort", () => {
-      if (timedOut) resolve(err(onTimeout()));
-    }, { once: true });
-  });
   try {
     return await Promise.race([run(controller.signal), deadline]);
   } finally {

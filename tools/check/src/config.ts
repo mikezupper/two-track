@@ -59,7 +59,7 @@ export const loadConfig = (projectDir: string): ConfigLoad => {
   const layersRaw = obj["layers"];
   const layers: Record<LayerName, ReadonlyArray<string>> = { ...defaultConfig.layers };
   if (layersRaw !== undefined) {
-    if (typeof layersRaw !== "object" || layersRaw === null) return { ok: false, error: `${file}: "layers" must be an object of string arrays — fix: {"domain":["src/domain"],...}` };
+    if (typeof layersRaw !== "object" || layersRaw === null || Array.isArray(layersRaw)) return { ok: false, error: `${file}: "layers" must be an object of string arrays — fix: {"domain":["src/domain"],...}` };
     for (const name of ["domain", "workflows", "infra", "lib", "root"] as const) {
       const v = (layersRaw as Record<string, unknown>)[name];
       if (v === undefined) continue;

@@ -96,7 +96,8 @@ if (report.ok) report.findings.forEach((f) => console.log(formatFinding(f)));
 ## Development
 
 ```bash
-pnpm --filter two-track-check check   # typecheck + tests (fixtures: violations, compliant, the library example, itself) + build + self-check
+pnpm --filter two-track-check check   # typecheck + tests with per-file coverage thresholds + build + self-check
+pnpm --filter two-track-check test:coverage # HTML and JSON reports in tools/check/coverage/
 ```
 
 The `violations` fixture annotates every offending line with `// expect: <rule>`; the test asserts the reported set equals the annotated set exactly, so a new rule needs a fixture line and a fixture line needs a rule.

@@ -52,6 +52,13 @@ const fail = (path: PathSegment[], message: string): Result<DecodeError, never> 
 const failMany = (issues: DecodeIssue[]): Result<DecodeError, never> =>
   err({ _tag: "DecodeError", issues: issues as unknown as NonEmptyArray<DecodeIssue> });
 
+/** Copy the first child's issues; append later issues without argument-count limits. */
+const appendIssues = (issues: DecodeIssue[] | undefined, incoming: NonEmptyArray<DecodeIssue>): DecodeIssue[] => {
+  if (issues === undefined) return incoming.slice();
+  for (let i = 0; i < incoming.length; i++) issues.push(incoming[i] as DecodeIssue);
+  return issues;
+};
+
 const make = <A>(run: Run<A>): Decoder<A> => ({ decode: (input) => run(input, []), run });
 
 /** Render issues for logs and HTTP 400 bodies. */
@@ -64,22 +71,22 @@ export const custom = <A>(check: (input: unknown) => input is A, expected: strin
 
 // ---------- primitives ----------
 
-export const unknown: Decoder<unknown> = make((input) => ok(input));
+export const unknown: Decoder<unknown> = /* @__PURE__ */ make((input) => ok(input));
 
-export const string: Decoder<string> = make((input, path) =>
+export const string: Decoder<string> = /* @__PURE__ */ make((input, path) =>
   typeof input === "string" ? ok(input) : fail(path, "expected string"),
 );
 
 /** A finite number (rejects NaN and ±Infinity). */
-export const number: Decoder<number> = make((input, path) =>
+export const number: Decoder<number> = /* @__PURE__ */ make((input, path) =>
   typeof input === "number" && Number.isFinite(input) ? ok(input) : fail(path, "expected finite number"),
 );
 
-export const integer: Decoder<number> = make((input, path) =>
+export const integer: Decoder<number> = /* @__PURE__ */ make((input, path) =>
   typeof input === "number" && Number.isInteger(input) ? ok(input) : fail(path, "expected integer"),
 );
 
-export const boolean: Decoder<boolean> = make((input, path) =>
+export const boolean: Decoder<boolean> = /* @__PURE__ */ make((input, path) =>
   typeof input === "boolean" ? ok(input) : fail(path, "expected boolean"),
 );
 
@@ -122,12 +129,17 @@ export const andThen = <A, B>(decoder: Decoder<A>, f: (a: A) => Result<string, B
 export const brand = <A, Name extends string>(decoder: Decoder<A>, _name: Name): Decoder<Brand<A, Name>> =>
   decoder as unknown as Decoder<Brand<A, Name>>;
 
-export const pattern = (regex: RegExp, message = `expected string matching ${regex}`): Decoder<string> =>
-  refine(string, (s) => regex.test(s), message);
+export const pattern = (regex: RegExp, message = `expected string matching ${regex}`): Decoder<string> => {
+  const owned = new RegExp(regex.source, regex.flags);
+  return refine(string, (s) => {
+    owned.lastIndex = 0;
+    return owned.test(s);
+  }, message);
+};
 
-export const nonEmptyString: Decoder<string> = refine(string, (s) => s.length > 0, "expected non-empty string");
+export const nonEmptyString: Decoder<string> = /* @__PURE__ */ refine(string, (s) => s.length > 0, "expected non-empty string");
 
-export const trimmed: Decoder<string> = map(string, (s) => s.trim());
+export const trimmed: Decoder<string> = /* @__PURE__ */ map(string, (s) => s.trim());
 
 export const minLength = (decoder: Decoder<string>, min: number): Decoder<string> =>
   refine(decoder, (s) => s.length >= min, `expected at least ${min} characters`);
@@ -141,8 +153,8 @@ export const min = (decoder: Decoder<number>, minimum: number): Decoder<number> 
 export const max = (decoder: Decoder<number>, maximum: number): Decoder<number> =>
   refine(decoder, (n) => n <= maximum, `expected <= ${maximum}`);
 
-/** ISO-8601 string → Date, rejecting invalid dates. */
-export const isoDate: Decoder<Date> = andThen(string, (s) => {
+/** Date-parsable string → Date; accepts the engine's grammar, including ISO-8601. */
+export const isoDate: Decoder<Date> = /* @__PURE__ */ andThen(string, (s) => {
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? err("expected ISO-8601 date string") : ok(d);
 });
@@ -176,8 +188,7 @@ export const array = <A>(item: Decoder<A>): Decoder<A[]> =>
       const r = item.run(input[i], path);
       path.pop();
       if (r.ok) out[i] = r.value;
-      else if (issues === undefined) issues = r.error.issues.slice();
-      else issues.push(...r.error.issues);
+      else issues = appendIssues(issues, r.error.issues);
     }
     return issues === undefined ? ok(out) : failMany(issues);
   });
@@ -194,9 +205,10 @@ export const record = <A>(value: Decoder<A>): Decoder<Record<string, A>> =>
       path.push(key);
       const r = value.run((input as Record<string, unknown>)[key], path);
       path.pop();
-      if (r.ok) out[key] = r.value;
-      else if (issues === undefined) issues = r.error.issues.slice();
-      else issues.push(...r.error.issues);
+      if (r.ok) {
+        if (key === "__proto__") Object.defineProperty(out, key, { value: r.value, enumerable: true, writable: true, configurable: true });
+        else out[key] = r.value;
+      } else issues = appendIssues(issues, r.error.issues);
     }
     return issues === undefined ? ok(out) : failMany(issues);
   });
@@ -226,14 +238,15 @@ export const struct = <F extends Fields>(fields: F): Decoder<StructOf<F>> => {
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i] as string;
       const decoder = decoders[i] as Decoder<unknown>;
-      const raw = obj[key];
+      const raw = Object.hasOwn(obj, key) ? obj[key] : undefined;
       if (raw === undefined && decoder.optional === true) continue;
       path.push(key);
       const r = decoder.run(raw, path);
       path.pop();
-      if (r.ok) out[key] = r.value;
-      else if (issues === undefined) issues = r.error.issues.slice();
-      else issues.push(...r.error.issues);
+      if (r.ok) {
+        if (key === "__proto__") Object.defineProperty(out, key, { value: r.value, enumerable: true, writable: true, configurable: true });
+        else out[key] = r.value;
+      } else issues = appendIssues(issues, r.error.issues);
     }
     return issues === undefined ? ok(out as StructOf<F>) : failMany(issues);
   });
@@ -269,12 +282,11 @@ export const taggedUnion = <Key extends string, V extends Variants<Key>>(
 /** Try alternatives in order; the issues reported are from the last alternative. */
 export const oneOf = <const Ds extends ReadonlyArray<Decoder<unknown>>>(...decoders: Ds): Decoder<Infer<Ds[number]>> =>
   make((input, path) => {
-    let last: Result<DecodeError, unknown> = fail(path, "expected one of the alternatives");
     for (let i = 0; i < decoders.length; i++) {
-      last = (decoders[i] as Decoder<unknown>).run(input, path);
-      if (last.ok) return last as Result<DecodeError, Infer<Ds[number]>>;
+      const result = (decoders[i] as Decoder<unknown>).run(input, path);
+      if (result.ok || i === decoders.length - 1) return result as Result<DecodeError, Infer<Ds[number]>>;
     }
-    return last as Result<DecodeError, Infer<Ds[number]>>;
+    return fail(path, "expected one of the alternatives");
   });
 
 /** Decode JSON text: parse (interop edge) then decode. */

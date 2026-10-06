@@ -69,10 +69,7 @@ const isPromiseType = (checker: ts.TypeChecker, type: ts.Type): boolean => {
 
 /** Element type of an array/tuple/ReadonlyArray type, if any. */
 const arrayElementType = (checker: ts.TypeChecker, type: ts.Type): ts.Type | undefined => {
-  if (checker.isArrayType(type) || checker.isTupleType(type)) {
-    const args = checker.getTypeArguments(type as ts.TypeReference);
-    return args.length > 0 ? args[0] : undefined;
-  }
+  // A tuple's numeric index type includes every element, not just the first.
   return checker.getIndexTypeOfType(type, ts.IndexKind.Number);
 };
 
@@ -131,7 +128,7 @@ const collectTwoTrackBindings = (sf: ts.SourceFile): ReadonlyMap<string, string>
     if (clause.name !== undefined) map.set(clause.name.text, "default");
     const bindings = clause.namedBindings;
     if (bindings === undefined) continue;
-    if (ts.isNamespaceImport(bindings)) map.set(bindings.name.text, "*");
+    if (ts.isNamespaceImport(bindings)) map.set(bindings.name.text, spec === "two-track/decode" ? "D" : "*");
     else for (const el of bindings.elements) map.set(el.name.text, (el.propertyName ?? el.name).text);
   }
   return map;
@@ -284,6 +281,10 @@ const checkNode = (ctx: Ctx, node: ts.Node): void => {
     }
   }
 
+  if (ts.isIdentifier(node) && !ts.isImportSpecifier(node.parent) && ctx.twoTrackBindings.get(node.text) === "unknown") {
+    report(ctx, node, "review-decode-unknown", "review", "`D.unknown` lets untyped data into the domain", "decode the actual shape; if the value is genuinely opaque, name it with a brand and never read into it");
+  }
+
   if ((ts.isAsExpression(node) || ts.isTypeAssertionExpression(node)) && !ctx.isBrandFile && !ctx.isTest) {
     const isUnknownChain = ts.isAsExpression(node) && ts.isAsExpression(node.expression) && node.expression.type.kind === ts.SyntaxKind.UnknownKeyword;
     const typeText = node.type.getText(ctx.sf);
@@ -344,29 +345,48 @@ const checkImport = (ctx: Ctx, node: ts.Node, spec: string): void => {
   }
 };
 
-const scanComments = (ctx: Ctx): void => {
+const collectComments = (sf: ts.SourceFile): ReadonlyArray<ts.CommentRange> => {
+  const ranges = new Map<number, ts.CommentRange>();
+  const visit = (node: ts.Node): void => {
+    for (const range of ts.getLeadingCommentRanges(sf.text, node.getFullStart()) ?? []) ranges.set(range.pos, range);
+    for (const range of ts.getTrailingCommentRanges(sf.text, node.end) ?? []) ranges.set(range.pos, range);
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return [...ranges.values()];
+};
+
+const scanComments = (ctx: Ctx, comments: ReadonlyArray<ts.CommentRange>): void => {
   if (ctx.isTest) return;
-  const text = ctx.sf.text;
   const re = /@ts-(ignore|expect-error|nocheck)\b/g;
-  for (const m of text.matchAll(re)) {
-    const pos = m.index;
-    const { line, character } = ctx.sf.getLineAndCharacterOfPosition(pos);
-    ctx.out.push({ file: ctx.rel, line: line + 1, col: character + 1, rule: "no-ts-suppress", severity: "error", message: `\`@ts-${m[1]}\` hides a type error`, fix: "fix the type error; the compiler's proof is the point" });
+  for (const comment of comments) {
+    for (const m of ctx.sf.text.slice(comment.pos, comment.end).matchAll(re)) {
+      const pos = comment.pos + m.index;
+      const { line, character } = ctx.sf.getLineAndCharacterOfPosition(pos);
+      ctx.out.push({ file: ctx.rel, line: line + 1, col: character + 1, rule: "no-ts-suppress", severity: "error", message: `\`@ts-${m[1]}\` hides a type error`, fix: "fix the type error; the compiler's proof is the point" });
+    }
   }
 };
 
 const ALLOW_RE = /two-track-check-allow\s+([a-z-]+)(?:\s+(.*))?/;
 
 /** Apply `// two-track-check-allow <rule> <reason>` suppressions on the same or preceding line. */
-const applySuppressions = (sf: ts.SourceFile, rel: string, findings: ReadonlyArray<Finding>): { readonly kept: Finding[]; readonly allowed: number } => {
-  const lines = sf.text.split("\n");
+const applySuppressions = (sf: ts.SourceFile, rel: string, findings: ReadonlyArray<Finding>, comments: ReadonlyArray<ts.CommentRange>): { readonly kept: Finding[]; readonly allowed: number } => {
+  const lines = new Map<number, string>();
+  for (const comment of comments) {
+    const first = sf.getLineAndCharacterOfPosition(comment.pos).line;
+    sf.text.slice(comment.pos, comment.end).split("\n").forEach((line, index) => {
+      const number = first + index + 1;
+      lines.set(number, `${lines.get(number) ?? ""} ${line}`);
+    });
+  }
   const kept: Finding[] = [];
   let allowed = 0;
   const seenBadAllow = new Set<number>();
   for (const f of findings) {
     let suppressed = false;
     for (const ln of [f.line, f.line - 1]) {
-      const textLine = lines[ln - 1];
+      const textLine = lines.get(ln);
       if (textLine === undefined) continue;
       const m = ALLOW_RE.exec(textLine);
       if (m === null || m[1] !== f.rule) continue;
@@ -403,9 +423,10 @@ export const checkSourceFile = (program: ts.Program, sf: ts.SourceFile, projectD
     twoTrackBindings: collectTwoTrackBindings(sf),
     out: [],
   };
+  const comments = collectComments(sf);
   checkNode(ctx, sf);
-  scanComments(ctx);
-  const { kept, allowed } = applySuppressions(sf, rel, ctx.out);
+  scanComments(ctx, comments);
+  const { kept, allowed } = applySuppressions(sf, rel, ctx.out, comments);
   kept.sort((a, b) => a.line - b.line || a.col - b.col || a.rule.localeCompare(b.rule));
   return { findings: kept, allowed };
 };

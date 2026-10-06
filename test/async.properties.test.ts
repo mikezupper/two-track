@@ -1,5 +1,5 @@
 import fc from "fast-check";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { Async, Cap, err, ok, type Result } from "../src/index.ts";
 import { arbEvents, countingSignal, deferred, fcParams, observe, pick, tick, tracker } from "./helpers/schedule.ts";
 
@@ -130,6 +130,46 @@ describe("Async.retry (properties)", () => {
 });
 
 describe("Async.mapConcurrent (properties)", () => {
+  it("an already-aborted parent starts no work and returns Aborted, including empty input", async () => {
+    await fc.assert(fc.asyncProperty(fc.array(fc.integer(), { maxLength: 8 }), async (items) => {
+      const outer = countingSignal();
+      outer.abort();
+      const run = vi.fn((n: number) => ok(n));
+      expect(await Async.mapConcurrent(items, run, { concurrency: 2, signal: outer.signal })).toEqual(err({ _tag: "Aborted" }));
+      expect(run).not.toHaveBeenCalled();
+      expect(outer.listeners()).toBe(0);
+    }), fcParams());
+  });
+
+  it("cancellation with pending items cannot return an incomplete success array", async () => {
+    await fc.assert(fc.asyncProperty(fc.integer({ min: 2, max: 10 }), async (length) => {
+      const outer = countingSignal();
+      const gate = deferred<Result<never, number>>();
+      const run = vi.fn(() => gate.promise);
+      const result = Async.mapConcurrent(Array.from({ length }, (_, i) => i), run, { concurrency: 1, signal: outer.signal });
+      outer.abort();
+      gate.resolve(ok(0));
+      expect(await result).toEqual(err({ _tag: "Aborted" }));
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(outer.listeners()).toBe(0);
+    }), fcParams());
+  });
+
+  it("typed optional signals work and error types include cancellation only where possible", async () => {
+    const run = (n: number): Result<"failed", number> => ok(n);
+    const options: Async.ConcurrencyOptions = { concurrency: 1 };
+    const plain = Async.mapConcurrent([1], run, { concurrency: 1 });
+    const optional = Async.mapConcurrent([1], run, options);
+    expectTypeOf(plain).toEqualTypeOf<Async.AsyncResult<"failed", number[]>>();
+    expectTypeOf(optional).toEqualTypeOf<Async.AsyncResult<"failed" | Async.Aborted, number[]>>();
+    const policy: Async.RetryPolicy<"failed"> = { attempts: 1, delay: () => 0, retriable: () => true };
+    const retried = Async.retry(() => run(1), policy);
+    expectTypeOf(retried).toEqualTypeOf<Async.AsyncResult<"failed" | Async.Aborted, number>>();
+    expect(await plain).toEqual(ok([1]));
+    expect(await optional).toEqual(ok([1]));
+    expect(await retried).toEqual(ok(1));
+  });
+
   it("bound respected; order preserved; first error aborts in-flight runs and stops new ones; outer listener removed", async () => {
     await fc.assert(
       fc.asyncProperty(
@@ -232,6 +272,29 @@ describe("Async.validateConcurrent (properties)", () => {
 });
 
 describe("Async.withTimeout (few, real-timer, order-insensitive)", () => {
+  it("propagates an already-aborted parent before running", async () => {
+    const parent = countingSignal();
+    parent.abort();
+    expect(await Async.withTimeout(async (signal) => signal.aborted ? err("cancelled") : ok(1), 10, () => "timeout", parent.signal)).toEqual(err("cancelled"));
+    expect(parent.listeners()).toBe(0);
+  });
+
+  it("still enforces the deadline when a run ignores parent cancellation", async () => {
+    vi.useFakeTimers();
+    try {
+      const parent = countingSignal();
+      const result = observe(Async.withTimeout(() => new Promise<Result<never, never>>(() => undefined), 10, () => "timeout", parent.signal));
+      parent.abort();
+      await vi.advanceTimersByTimeAsync(10);
+      expect(result.settled).toBe(true);
+      expect(result.value).toEqual(err("timeout"));
+      expect(parent.listeners()).toBe(0);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("inner never settles → timeout error, inner signal aborted, parent listener removed; inner settles → its result", async () => {
     await fc.assert(
       fc.asyncProperty(fc.boolean(), fc.boolean(), async (innerSettles, innerOk) => {

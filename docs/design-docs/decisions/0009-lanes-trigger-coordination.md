@@ -25,6 +25,10 @@ Status: accepted        Date: 2026-10-05
 
 After a lane-level abort, `queueLane` resolves every call still waiting as `err(Busy)` without starting it, and rejects new calls as `Busy`, the same meaning a `semaphore` waiter gets. The run in flight finishes on its own after seeing the abort. The returned union is `E | QueueFull | Busy`.
 
+## Amendment (2026-10-05, full project review)
+
+Same-turn switch bursts supersede earlier calls even when their runs resolved immediately, before promise continuations execute. A semaphore checks cancellation again after acquiring a permit and before starting the callback, returning Busy and releasing the permit if cancelled in that gap. Counts normalize NaN and fractional queue depths consistently with their documented bounds. Linked signals retain independent controllers while avoiding temporary arrays. Regression and schedule tests verify FIFO, bounds, cancellation and cleanup.
+
 ## Consequences
 
 - Lanes live in the shell (UI event handlers, HTTP adapters), never in `domain/`; the skill's decision table says so.

@@ -91,6 +91,16 @@ describe("exhaustLane", () => {
 });
 
 describe("queueLane", () => {
+  it.each([Number.NaN, -1, 0.5, 1.5])("normalizes depth %s to a nonnegative whole number", async (depth) => {
+    const normalized = Math.max(0, Math.floor(depth) || 0);
+    const gate = deferred<Result<never, number>>();
+    const lane = Lane.queueLane(() => gate.promise, { depth });
+    const accepted = Array.from({ length: normalized + 1 }, () => lane());
+    expect(await lane()).toEqual(err({ _tag: "QueueFull", depth: normalized }));
+    gate.resolve(ok(1));
+    expect(await Promise.all(accepted)).toEqual(accepted.map(() => ok(1)));
+  });
+
   it("runs strictly in order, one at a time, and a failure does not stop later calls", async () => {
     const order: string[] = [];
     let inFlight = 0;
@@ -244,6 +254,27 @@ describe("throttle", () => {
 });
 
 describe("semaphore", () => {
+  it("handles the same abort signal supplied at both call and lane level", async () => {
+    const controller = new AbortController();
+    const sem = Lane.semaphore(1, { signal: controller.signal });
+    const gate = deferred<Result<never, number>>();
+    let seen: AbortSignal | undefined;
+    const result = sem.run((signal) => { seen = signal; return gate.promise; }, controller.signal);
+    await tick();
+    controller.abort();
+    expect(seen?.aborted).toBe(true);
+    gate.resolve(ok(1));
+    expect(await result).toEqual(ok(1));
+    expect(sem.available()).toBe(1);
+  });
+
+  it("NaN permits still allow one run", async () => {
+    const sem = Lane.semaphore(Number.NaN);
+    expect(sem.available()).toBe(1);
+    expect(await sem.run(async () => ok(1))).toEqual(ok(1));
+    expect(sem.available()).toBe(1);
+  });
+
   it("never exceeds the permits, serves waiters FIFO, and accounts for availability", async () => {
     const sem = Lane.semaphore(2);
     expect(sem.available()).toBe(2);

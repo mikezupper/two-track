@@ -21,8 +21,8 @@ export type Tagged<Tag extends string, Fields extends object = Record<never, nev
 export const tagged =
   <Tag extends string>(tag: Tag) =>
   <Fields extends object = Record<never, never>>() =>
-  (fields: Fields): Tagged<Tag, Fields> =>
-    ({ _tag: tag, ...fields });
+  (fields: Fields): Tagged<Tag, Omit<Fields, "_tag">> =>
+    ({ ...fields, _tag: tag });
 
 /** Type guard for one tag of a union. */
 export const hasTag =

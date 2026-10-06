@@ -24,4 +24,5 @@ Every function takes the data first: `R.map(result, f)`, `D.refine(decoder, pred
 ## Consequences
 
 - Point-free style is explicitly unsupported; the README says so.
-- Subpath imports are not provided in 0.x; the namespaces are the grouping mechanism.
+- Module subpaths are now additive alternatives for smaller consumer bundles (decision [0013](0013-consumer-bundles-and-measured-hot-paths.md)); root namespaces remain the original grouping mechanism.
+- `tagged` keeps its declared discriminant authoritative in both its value and return type, including when a fields object carries a conflicting `_tag` (project review amendment).

@@ -24,6 +24,7 @@ export const loadProgram = (projectDir: string, config: Config, projectOption?: 
     onUnRecoverableConfigFileDiagnostic: (d) => diagnostics.push(ts.flattenDiagnosticMessageText(d.messageText, "\n")),
   };
   const parsed = ts.getParsedCommandLineOfConfigFile(configPath, {}, host);
+  for (const diagnostic of parsed?.errors ?? []) diagnostics.push(ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
   if (parsed === undefined || diagnostics.length > 0) return { ok: false, error: `${configPath}: ${diagnostics.join("; ") || "could not parse"} — fix: make the tsconfig valid for TypeScript 6` };
   const program = ts.createProgram({ rootNames: parsed.fileNames, options: { ...parsed.options, noEmit: true } });
   const projectAbs = resolve(projectDir);

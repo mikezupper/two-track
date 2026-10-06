@@ -21,9 +21,11 @@ jobs:
       - name: Invariants (architecture + taste, remediation in messages)
         run: pnpm lint
       - name: Tests (unit, properties, structural, example) with coverage thresholds
-        run: pnpm vitest run --coverage
+        run: pnpm test:coverage
       - name: Build (rewrites .ts specifiers in declarations)
         run: pnpm build
+      - name: Consumer bundle size and runtime checks (Rolldown and esbuild)
+        run: pnpm check:bundle
       - name: Consumer check (pack, install, require/import, tsc under TS 6 and TS 7 with skipLibCheck false)
         run: pnpm check:package
       - name: two-track-check package (own TS 6 toolchain)

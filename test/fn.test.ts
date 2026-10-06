@@ -10,7 +10,7 @@ describe("fn", () => {
     expect(pipe(1, (n) => n + 1, (n) => n + 1, (n) => n + 1, (n) => n + 1, (n) => n + 1, (n) => n + 1, (n) => n + 1)).toBe(8);
   });
   it("identity and constant", () => {
-    fc.assert(fc.property(fc.anything(), (x) => identity(x) === x));
+    fc.assert(fc.property(fc.anything(), (x) => Object.is(identity(x), x)));
     expect(constant(3)()).toBe(3);
   });
 });

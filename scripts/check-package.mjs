@@ -36,6 +36,10 @@ try {
     const require = createRequire(import.meta.url);
     const cjs = require("two-track");
     const pkg = require("two-track/package.json");
+    for (const subpath of Object.keys(pkg.exports).filter((key) => key !== "." && key !== "./package.json")) {
+      await import("two-track" + subpath.slice(1));
+      require("two-track" + subpath.slice(1));
+    }
     if (!R.isOk(ok(1)) || typeof D.struct !== "function" || typeof Async.retry !== "function" || typeof Lane.switchLane !== "function") throw new Error("esm surface");
     if (typeof cjs.ok !== "function") throw new Error("require(esm) surface");
     if (pkg.version !== ${JSON.stringify(version)}) throw new Error("package.json export");
@@ -49,6 +53,14 @@ try {
     import { ok, err, R, D, Async, Lane, type Result, type AsyncResult, type Infer } from "two-track";
     import fc from "fast-check";
     import { decoderRoundTrip } from "two-track/testing";
+    import { map as mapResult } from "two-track/result";
+    import { number as numberDecoder } from "two-track/decode";
+    import { fromPromise } from "two-track/async";
+    import type { Brand as SubpathBrand } from "two-track/brand";
+    const subpaths: Result<import("two-track/decode").DecodeError, number> = mapResult(numberDecoder.decode(1), x => x);
+    const brandedTypeOnly: SubpathBrand<string, "Id"> | undefined = undefined;
+    void fromPromise(Promise.resolve(1), () => "failed");
+    void subpaths; void brandedTypeOnly;
     const Qty = D.brand(D.min(D.integer, 1), "Qty");
     type Qty = Infer<typeof Qty>;
     const parse = (s: string): Result<"bad", Qty> => R.mapErr(Qty.decode(Number(s)), () => "bad" as const);

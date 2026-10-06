@@ -29,6 +29,12 @@ Asynchronous railways can be a lazy `Task`/`Future` type (Fluture, fp-ts `TaskEi
 
 `retry` checks its `signal` before every attempt **and after every backoff sleep** (sleepers resolve, not reject, on abort, so the previous after-sleep fall-through ran one extra attempt). On abort it returns `err(Aborted)`; the error type is `E | Aborted` only for policies that pass a `signal`, so uncancellable call sites are unchanged.
 
+## Amendment (2026-10-05, full project review)
+
+`mapConcurrent` starts no work for an already-aborted parent and returns `Aborted` after caller cancellation, rather than reporting a success array with missing items. The first operation error still takes precedence. Its overloads add cancellation only where a signal can be present. Both it and `retry` accept policies/options typed with an optional signal. `withTimeout` propagates an already-aborted parent and resolves its deadline independently of abort events, so a run that ignores cancellation still reaches the deadline. Numeric counts normalize NaN to one, matching the existing minimum-one behavior.
+
+See [review regressions](../../../test/async.properties.test.ts) for generated cancellation cases and the deterministic deadline regression.
+
 ## Consequences
 
 - `no-catch-method` invariant; `.then(ok, onRejected)` is the internal idiom.

@@ -22,18 +22,18 @@ import { err } from "./result.ts";
 import { tagged } from "./tagged.ts";
 
 /** A newer trigger replaced this call before it could produce a result. */
-export const Superseded = tagged("Superseded")();
+export const Superseded = /* @__PURE__ */ tagged("Superseded")();
 /** Rejected without starting: a call is in flight, the window is closed, or the wait was aborted. */
-export const Busy = tagged("Busy")();
+export const Busy = /* @__PURE__ */ tagged("Busy")();
 /** Rejected without starting: the queue already holds `depth` waiting calls. */
-export const QueueFull = tagged("QueueFull")<{ depth: number }>();
+export const QueueFull = /* @__PURE__ */ tagged("QueueFull")<{ depth: number }>();
 export type Superseded = ReturnType<typeof Superseded>;
 export type Busy = ReturnType<typeof Busy>;
 export type QueueFull = ReturnType<typeof QueueFull>;
 
 /** Shared instances: a rejected call allocates nothing. */
-const SUPERSEDED: Result<Superseded, never> = err(Superseded({}));
-const BUSY: Result<Busy, never> = err(Busy({}));
+const SUPERSEDED: Result<Superseded, never> = /* @__PURE__ */ err(Superseded({}));
+const BUSY: Result<Busy, never> = /* @__PURE__ */ err(Busy({}));
 
 export type LaneOptions = {
   /** Lane-level abort: delivered to every in-flight run and every pending wait. */
@@ -45,24 +45,19 @@ type Run<Args extends ReadonlyArray<unknown>, E, A> = (signal: AbortSignal, ...a
 type Linked = { readonly controller: AbortController; readonly unlink: () => void };
 
 /** A controller that aborts when any of the given signals aborts; `unlink` removes the listeners. */
-const linked = (...signals: ReadonlyArray<AbortSignal | undefined>): Linked => {
+const linked = (signal?: AbortSignal, parent?: AbortSignal): Linked => {
   const controller = new AbortController();
   const onAbort = (): void => controller.abort();
-  const attached: AbortSignal[] = [];
-  for (let i = 0; i < signals.length; i++) {
-    const s = signals[i];
-    if (s === undefined) continue;
-    if (s.aborted) {
-      controller.abort();
-      continue;
-    }
-    s.addEventListener("abort", onAbort, { once: true });
-    attached.push(s);
+  if (signal?.aborted === true || parent?.aborted === true) controller.abort();
+  else {
+    signal?.addEventListener("abort", onAbort, { once: true });
+    parent?.addEventListener("abort", onAbort, { once: true });
   }
   return {
     controller,
     unlink: () => {
-      for (let i = 0; i < attached.length; i++) (attached[i] as AbortSignal).removeEventListener("abort", onAbort);
+      signal?.removeEventListener("abort", onAbort);
+      parent?.removeEventListener("abort", onAbort);
     },
   };
 };
@@ -92,7 +87,7 @@ export const switchLane = <Args extends ReadonlyArray<unknown>, E, A>(
     const result = await Promise.race([run(controller.signal, ...args), superseded]);
     unlink();
     if (current === controller) current = undefined;
-    return result;
+    return controller.signal.aborted ? SUPERSEDED : result;
   };
 };
 
@@ -126,14 +121,14 @@ export const exhaustLane = <Args extends ReadonlyArray<unknown>, E, A>(
  * most `depth` calls may wait behind the running one (default: unbounded);
  * beyond that the call is rejected with `err(QueueFull)` without being queued.
  * A failing run does not stop the calls behind it. A lane-level abort is
- * delivered through the signal: queued runs still start, with an already
- * aborted signal, and are expected to return promptly.
+ * delivered to the active run through its signal. Waiting calls resolve Busy
+ * promptly without starting, and new calls are rejected as Busy.
  */
 export const queueLane = <Args extends ReadonlyArray<unknown>, E, A>(
   run: Run<Args, E, A>,
   options: LaneOptions & { readonly depth?: number } = {},
 ): ((...args: Args) => AsyncResult<E | QueueFull | Busy, A>) => {
-  const depth = options.depth ?? Number.POSITIVE_INFINITY;
+  const depth = Math.max(0, Math.floor(options.depth ?? Number.POSITIVE_INFINITY) || 0);
   let tail: Promise<unknown> = Promise.resolve();
   let active = 0;
   let pending = 0;
@@ -243,12 +238,11 @@ export type Semaphore = {
 
 /**
  * semaphore: at most `permits` concurrent runs; the rest wait in FIFO order.
- * This is the primitive under `Async.mapConcurrent`, exposed for the cases
- * where the callers are not a list — N request handlers sharing one
+ * Use when the callers are not a list — N request handlers sharing one
  * connection pool, for instance.
  */
 export const semaphore = (permits: number, options: LaneOptions = {}): Semaphore => {
-  let free = Math.max(1, Math.floor(permits));
+  let free = Math.max(1, Math.floor(permits) || 1);
   const waiters: Array<() => void> = [];
 
   const acquire = (signal: AbortSignal): Promise<boolean> => {
@@ -284,7 +278,8 @@ export const semaphore = (permits: number, options: LaneOptions = {}): Semaphore
     run: async (f, signal) => {
       const { controller, unlink } = linked(signal, options.signal);
       const granted = await acquire(controller.signal);
-      if (!granted) {
+      if (!granted || controller.signal.aborted) {
+        if (granted) release();
         unlink();
         return BUSY;
       }

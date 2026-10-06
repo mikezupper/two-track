@@ -27,7 +27,7 @@ export const ok = <A>(value: A): Ok<A> => ({ ok: true, value });
 export const err = <E>(error: E): Err<E> => ({ ok: false, error });
 
 /** A shared success-with-no-value. No allocation on the common path. */
-export const unit: Ok<undefined> = ok(undefined);
+export const unit: Ok<undefined> = /* @__PURE__ */ ok(undefined);
 
 export const isOk = <E, A>(r: Result<E, A>): r is Ok<A> => r.ok;
 export const isErr = <E, A>(r: Result<E, A>): r is Err<E> => !r.ok;

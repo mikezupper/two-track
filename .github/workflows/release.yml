@@ -24,7 +24,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Full check (same as CI)
-        run: pnpm check && pnpm check:tools
+        run: pnpm check
       - name: Tag matches package.json version
         run: |
           v=$(node -p "require('./package.json').version")

@@ -25,6 +25,10 @@ Rule families: banned constructs (`no-throw`, `no-try`, `no-catch`, `no-generato
 - **typescript-eslint plugin** — blocked: no TS 7 support (decision 0007); revisit as an additional distribution when it lands.
 - **Checker inside the library package** — rejected: it would pull TypeScript 6 and Node APIs into a package that must stay runtime-free.
 
+## Amendment (2026-10-05, full project review)
+
+Project loading fails on all parsed tsconfig diagnostics instead of reporting an empty or invalid project as clean. Mixed tuples inspect every element for Results. Suppression directives and allowances are read only from TypeScript comment ranges; strings cannot hide findings or generate false suppression findings. Config arrays cannot masquerade as layer objects, and invalid CLI arguments produce usage errors. Direct decoder and Result subpath imports retain review diagnostics. These behaviors have fixture, configuration, project-loading and CLI tests.
+
 ## Consequences
 
 - Apps add `two-track-check` as a devDependency and run it in `lint`/CI (skill `scaffold.md`); the skill's `code-review.md` runs it first and keeps the greps as the fallback.

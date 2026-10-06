@@ -15,13 +15,15 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "selfcheck": "node bin/two-track-check.mjs test/fixtures/compliant && node bin/two-track-check.mjs --project tsconfig.self.json .",
-    "check": "pnpm typecheck && pnpm test && pnpm build && pnpm selfcheck"
+    "check": "pnpm typecheck && pnpm test:coverage && pnpm build && pnpm selfcheck"
   },
   "dependencies": {
     "typescript": "6.0.3"
   },
   "devDependencies": {
+    "@vitest/coverage-v8": "^5.0.3",
     "@types/node": "^26.6.4",
     "vitest": "^5.0.3"
   }

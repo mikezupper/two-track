@@ -62,17 +62,19 @@ All numbers are from the benchmark scripts in [`bench/`](bench/) on a Linux work
 
 **Encodings of the same railway, one million items**
 
+Consumer bundles are also measured with Rolldown and esbuild. Direct subpath imports avoid esbuild retaining an entire namespace: the Result example is **117 bytes minified** and the struct decoder example is **1,124 bytes**, versus 1,551 and 4,279 through root namespaces. See [the methods and measurements](docs/references/benchmarks.md#consumer-bundles).
+
 | Encoding | Node 24 | Bun 1.3 |
 |---|---|---|
-| Two plain shapes, `{ ok: true, value }` / `{ ok: false, error }`, early return (**this library's baseline**) | 12 ms | 11 ms |
-| `two-track` `R.andThen` combinators (closure per step) | 24 ms | 19 ms |
+| Two plain shapes, `{ ok: true, value }` / `{ ok: false, error }`, early return (**this library's baseline**) | 13 ms | 11 ms |
+| `two-track` `R.andThen` combinators (closure per step) | 23 ms | 19 ms |
 | Go-style tuple `[error, value]` | 18 ms | 13 ms |
 | One monomorphic shape with both fields always present | 22 ms | 14 ms |
 | `_tag: "Ok" / "Err"` string discriminant | 24 ms | 15 ms |
 | Class with fluent `.andThen()` methods | 35 ms | 24 ms |
-| `throw` / `try` / `catch` | 297–341 ms | 57–79 ms |
+| `throw` / `try` / `catch` | 297–345 ms | 57–79 ms |
 | Plain shapes plus `Object.freeze` on every result | 116–123 ms | 194–213 ms |
-| Generator do-notation (`safeTry`, `Effect.gen` style) | 969 ms | 464–488 ms |
+| Generator do-notation (`safeTry`, `Effect.gen` style) | 1002 ms | 464–488 ms |
 
 **Other approaches to the same railway**
 
@@ -361,7 +363,7 @@ const db = Lane.semaphore(10);
 const row = await db.run((signal) => repo.find(id, signal));
 ```
 
-Each lane adds its failure mode to the returned union (`E | Superseded`, `E | Busy`, `E | QueueFull`), so a `match` at the edge is forced to say what a superseded search or a full queue looks like to the user.
+Each lane adds its failure mode to the returned union (`E | Superseded`, `E | Busy`, `E | QueueFull | Busy`), so a `match` at the edge is forced to say what a superseded search or a full queue looks like to the user.
 
 ### Testing helpers: laws in one line
 
@@ -449,6 +451,7 @@ Stated plainly, because a library that hides its limits is a library that gets m
 | Enforced purity | The compiler cannot see effects | Capabilities by convention, plus lint on `Date.now`/`Math.random`/timers/`console` in domain code |
 | Higher-kinded abstraction (one `map` over Result, Option, Array) | TypeScript has no HKTs; neither does Rust | Concrete `R.map`, `O.map`, `Array.prototype.map` |
 | Runtime immutability | 10–20x measured cost of `Object.freeze` | `readonly` types; freeze fixtures in tests only |
+| Strict ISO date syntax in `D.isoDate` | It currently uses the engine's Date parser, which also accepts other formats | Refine the wire string to your required format before applying `D.isoDate`; tracked in tech debt |
 | Automatic retries, caching, metrics, tracing | Not a runtime concern this library owns | Thin helpers (`Async.retry`, `withTimeout`); observability belongs to your shell |
 
 Compared with **neverthrow**: same idea, similar speed for the fluent style, but neverthrow ships classes with methods (2–3x) and `safeTry` generators (80x) as the recommended idioms, and it has no decoders, capabilities, or concurrency helpers. Compared with **Effect**: Effect gives you everything in the left column above, with a correctness story this library cannot match, at ~100x on CPU-bound paths and with a learning curve; choose Effect when the dependency graph, concurrency, or interruption semantics are the hard part of your system. Compared with **Rust**: Rust enforces what this library can only check; choose Rust when the compiler must be the gatekeeper or when throughput matters more than the JavaScript ecosystem. Compared with **Ramda**: Ramda is a transformation vocabulary, not a railway, and its currying costs 20x; this library does not support point-free style on purpose.
@@ -480,15 +483,19 @@ This repository is built to be worked on by coding agents with humans steering, 
 
 ```bash
 pnpm install          # dev dependencies only; the library has none
-pnpm check            # typecheck + invariants + tests + benchmark ratio — the definition of done
+pnpm check            # typecheck + invariants + coverage + benchmark + build + consumer + checker checks
 pnpm test             # vitest: unit, property (fast-check), structural (invariants), example
+pnpm test:coverage    # library + invariant coverage; enforces per-file minimums
 pnpm typecheck        # tsc 7, every strict flag
 pnpm lint             # scripts/invariants.ts — architecture and taste, with fixes in the messages
 pnpm bench            # bench/encodings.ts — the encoding table above, on your machine
 pnpm bench:check      # same, failing if combinators exceed 4x the inline baseline
+pnpm bench:hot        # decoder throughput and async overhead, with checksums
+pnpm bench:bundle     # representative minified/gzip/Brotli consumers, Rolldown and esbuild
+pnpm check:bundle     # consumer runtime smoke checks + bundle byte budgets (after build)
 pnpm example          # examples/checkout.ts — the worked workflow end to end
 pnpm build            # emits dist/ with declarations and source maps
-pnpm check:tools      # the two-track-check package: its own typecheck, tests, build and self-check
+pnpm check:tools      # two-track-check: typecheck, tests with coverage, build and self-check (also in check)
 pnpm check:package    # pack + install + import/require + tsc (TS 6 and 7, skipLibCheck false) as a consumer would
 ```
 
@@ -502,6 +509,16 @@ The definition of done for any change is `pnpm check` green, the relevant decisi
 pnpm add two-track            # once published (release workflow: tag v* → npm trusted publishing with provenance)
 pnpm add github:mikezupper/two-track   # until then
 ```
+
+For the smallest bundles across bundlers, import just the functions you use from a module subpath:
+
+```ts
+import { ok, andThen } from "two-track/result";
+import { struct, integer, nonEmptyString } from "two-track/decode";
+import { mapConcurrent } from "two-track/async";
+```
+
+All library modules have subpaths (`result`, `option`, `brand`, `tagged`, `match`, `fn`, `decode`, `async`, `capabilities`, `lanes`, `testing`). Root namespaces remain available. The compiler and runtime consumer checks cover both import styles.
 
 **Consumer requirements** (what `dist/` needs) are deliberately looser than **contributor requirements** (what developing this repo needs):
 

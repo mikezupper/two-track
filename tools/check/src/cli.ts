@@ -18,6 +18,7 @@ const parseArgs = (argv: ReadonlyArray<string>): Args => {
   let json = false;
   let strict = false;
   let help = false;
+  let hasProjectDir = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i] as string;
     if (a === "--json") json = true;
@@ -25,10 +26,14 @@ const parseArgs = (argv: ReadonlyArray<string>): Args => {
     else if (a === "--help" || a === "-h") help = true;
     else if (a === "--project") {
       const v = argv[++i];
-      if (v === undefined) return { projectDir, json, strict, help, error: "--project needs a path" };
+      if (v === undefined || v.startsWith("--")) return { projectDir, json, strict, help, error: "--project needs a path" };
       project = v;
     } else if (a.startsWith("--")) return { projectDir, json, strict, help, error: `unknown option ${a}` };
-    else projectDir = a;
+    else {
+      if (hasProjectDir) return { projectDir, json, strict, help, error: "only one project directory is allowed" };
+      projectDir = a;
+      hasProjectDir = true;
+    }
   }
   return project === undefined ? { projectDir, json, strict, help } : { projectDir, project, json, strict, help };
 };

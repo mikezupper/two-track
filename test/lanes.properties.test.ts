@@ -27,6 +27,14 @@ const drain = async <A>(t: ReturnType<typeof tracker<E, A>>, calls: ReadonlyArra
 };
 
 describe("Lane.switchLane (properties)", () => {
+  it("same-turn bursts supersede all earlier calls even when their runs resolve immediately", async () => {
+    await fc.assert(fc.asyncProperty(fc.array(fc.integer(), { minLength: 2, maxLength: 10 }), async (items) => {
+      const lane = Lane.switchLane(async (_signal, n: number) => ok(n));
+      const results = await Promise.all(items.map((n) => lane(n)));
+      expect(results).toEqual(items.map((n, i) => i === items.length - 1 ? ok(n) : SUPERSEDED));
+    }), fcParams());
+  });
+
   it("a call keeps its own result only if it settled while still the latest; otherwise Superseded at once; ≤1 run awaited; abort settles all, no leaks", async () => {
     await fc.assert(
       fc.asyncProperty(arbEvents(["call", "ok", "err", "abortLane"], 16), async (events) => {
@@ -256,6 +264,20 @@ describe("Lane.throttle (properties)", () => {
 });
 
 describe("Lane.semaphore (properties)", () => {
+  it("abort between permit acquisition and callback start returns Busy and restores the permit", async () => {
+    await fc.assert(fc.asyncProperty(fc.integer({ min: 1, max: 5 }), async (permits) => {
+      const sem = Lane.semaphore(permits);
+      const signal = countingSignal();
+      let started = false;
+      const result = sem.run(async () => { started = true; return ok(1); }, signal.signal);
+      signal.abort();
+      expect(await result).toEqual(BUSY);
+      expect(started).toBe(false);
+      expect(sem.available()).toBe(permits);
+      expect(signal.listeners()).toBe(0);
+    }), fcParams());
+  });
+
   it("permits never exceeded; FIFO; every permit released; aborted waiters are Busy without a permit; no listener leaks", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 1, max: 3 }), arbEvents(["call", "ok", "err", "abortCall", "abortLane"], 18), async (permits, events) => {

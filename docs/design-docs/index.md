@@ -33,3 +33,5 @@ Status: accepted | superseded by NNNN | rejected        Date: YYYY-MM-DD
 | [0009](decisions/0009-lanes-trigger-coordination.md) | `Lane`: switch/exhaust/queue/debounce/throttle/semaphore — trigger coordination, distinct from fan-out | accepted | lanes tests (peak concurrency, abort, ordering) |
 | [0010](decisions/0010-checker-as-separate-package.md) | `two-track-check` ships as a separate dev package on TypeScript 6's API; type-aware `ignored-result` rule | accepted | `tools/check` tests; CI `check:tools` |
 | [0011](decisions/0011-testing-helpers-inject-fast-check.md) | `two-track/testing` law/round-trip helpers take fast-check as a parameter; no dependency | accepted | `test/testing.test.ts` |
+| [0012](decisions/0012-coverage-in-the-complete-check.md) | Coverage per file, negative invariant tests and the checker are part of the complete check | accepted | both coverage configs; `pnpm check` |
+| [0013](decisions/0013-consumer-bundles-and-measured-hot-paths.md) | Additive module subpaths, consumer bundle budgets and measured allocation reductions | accepted | bundle and consumer checks; hot-path benchmarks |

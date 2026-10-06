@@ -4,7 +4,7 @@ The top-level map of `two-track`. If the `LAYERS` table in `scripts/invariants.t
 
 ## Shape
 
-One library package with two entry points (`two-track`, `two-track/testing`) and eleven modules, plus a separate dev-time tool package in `tools/check`. There is no runtime: every library module exports plain functions and types, and the only module-level state is the shared `none` and `unit` singletons. Lanes and semaphores hold *contained* state inside a closure the caller creates, which is the same shape as a capability.
+One library package with a root entry, direct module subpaths and the separate `two-track/testing` entry, plus a dev-time tool package in `tools/check`. There is no runtime: every library module exports plain functions and types; module-level values include shared `none`, `unit` and tagged error constants. Lanes and semaphores hold *contained* state inside a closure the caller creates, which is the same shape as a capability.
 
 ```
                        ┌──────────────┐
@@ -36,7 +36,7 @@ One library package with two entry points (`two-track`, `two-track/testing`) and
 | `src/fn.ts` | `pipe`, `identity`, `constant` | — | 30 |
 | `src/capabilities.ts` | `Clock`, `Sleeper`, `Random`, `IdGen`; system + deterministic implementations. The only module allowed to touch platform time/random/timers | — | 110 |
 | `src/decode.ts` | `Decoder<A>`; primitives, refinements, `brand`, containers, `taggedUnion`, `oneOf`, `json`, `lazy` | `result`, `option`, `brand` | 300 |
-| `src/async.ts` | `AsyncResult`; `fromPromise`/`tryPromise`; `mapConcurrent`/`validateConcurrent`/`all`; `retry`/`backoff` (`retriable` required); `withTimeout` | `result`, `capabilities` | 230 |
+| `src/async.ts` | `AsyncResult`; `fromPromise`/`tryPromise`; `mapConcurrent`/`validateConcurrent`/`all`; `retry`/`backoff` (`retriable` required); `withTimeout` | `result`, `capabilities`, `tagged` | 295 |
 | `src/lanes.ts` | Trigger coordination (decision 0009): `switchLane`, `exhaustLane`, `queueLane`, `debounce`, `throttle`, `semaphore`; errors `Superseded`/`Busy`/`QueueFull` | `result`, `tagged`, `capabilities`, `async` | 250 |
 | `src/testing.ts` | `two-track/testing` entry (decision 0011): `arbResult`/`arbOption`/`arbDecoded`, `functorLaws`/`monadLaws`, `decoderRoundTrip`/`decoderNeverThrows`/`decoderDoesNotMutate`; fast-check injected | `result`, `option`, `decode` | 150 |
 | `src/index.ts` | Public surface (`two-track`) | all | 45 |
@@ -49,7 +49,7 @@ Lowest first. A module may import only from layers below it (and within the "cor
 1. **Core algebra** — `result`, `brand`, `tagged`, `match`, `fn`, `capabilities`. Import nothing.
 2. **Derived algebra** — `option` → `result`.
 3. **Boundary** — `decode` → `result`, `option`, `brand`.
-4. **Shell** — `async` → `result`, `capabilities`; `lanes` → `result`, `tagged`, `capabilities`, `async`.
+4. **Shell** — `async` → `result`, `capabilities`, `tagged`; `lanes` → `result`, `tagged`, `capabilities`, `async`.
 5. **Test support** — `testing` → `result`, `option`, `decode` (published separately as `two-track/testing`; never imported by `index`).
 6. **Surface** — `index` → anything.
 
@@ -61,6 +61,7 @@ Forbidden everywhere in `src/`: `node:*` imports, platform time/random/timers (o
 - Top-level exports: types (`Result`, `Ok`, `Err`, `Option`, `Some`, `None`, `Brand`, `Tagged`, `Decoder`, `DecodeError`, `AsyncResult`, …), constructors (`ok`, `err`, `unit`, `some`, `none`), `match`, `matchBy`, `assertNever`, `tagged`, `hasTag`, `pipe`, `identity`, `constant`.
 - Namespaces: `R` (result), `O` (option), `D` (decode), `Async`, `Cap` (capabilities), `Lane` (lanes).
 - `two-track/testing` is a separate entry point so test-only code never lands in an application bundle.
+- Direct module subpaths expose the existing modules for smaller consumer bundles (decision 0013); root namespace imports remain stable.
 - `Decoder.run` is marked `@internal`; it is the mutable-path-stack entry used by containers and may change.
 
 ## Where application code goes (the skill's assumption)

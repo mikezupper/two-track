@@ -20,10 +20,11 @@
 ## Commands
 
 ```bash
-pnpm check        # definition of done: typecheck + lint + test + bench:check
+pnpm check        # definition of done: typecheck + lint + coverage + bench + build + consumer + tools
 pnpm check:tools  # the two-track-check package (tools/check): its typecheck + tests + build + self-check
 pnpm check:package # pack + install + import/require + tsc under TS 6 and 7 as a consumer (part of pnpm check)
 pnpm test         # vitest (unit, fast-check properties, structural invariants, example)
+pnpm test:coverage # library + invariant coverage, with per-file thresholds
 pnpm lint         # node scripts/lint-invariants.ts
 pnpm bench        # node bench/encodings.ts   (--check enforces the 4x ratio)
 pnpm example      # node examples/checkout.ts
