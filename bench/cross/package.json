@@ -1,0 +1,10 @@
+{
+  "name": "two-track-bench-cross",
+  "private": true,
+  "type": "module",
+  "description": "Third-party comparison benchmarks (decoders vs Zod/Valibot/ArkType; railway vs Ramda/Effect). Kept in its own workspace so the library root never depends on them.",
+  "scripts": {
+    "bench": "node decoders-vs.mjs && node railway-vs.mjs"
+  },
+  "devDependencies": {}
+}

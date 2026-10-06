@@ -1,2 +1,3 @@
 packages:
   - 'tools/*'
+  - 'bench/cross'
