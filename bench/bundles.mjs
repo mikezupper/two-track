@@ -43,8 +43,10 @@ const sizes = {};
 // esbuild: no `new Function` in a struct-only consumer). The full-surface bundle includes the
 // compiler (~4 kB). Budgets below are tripwires set ~10% above those measurements.
 // 2026-10-06 (later): `compile` gained native taggedUnion/record emitters (+~1.8 kB in the full
-// surface only; selective consumers unchanged because compile is tree-shaken unless imported).
-const budgets = { resultDirect: 160, decoderDirect: 2500, primitiveDirect: 1150, interopDirect: 220, concurrentDirect: 800, switchDirect: 900, full: 24_500, testing: 1600 };
+// surface; compile is still tree-shaken from selective consumers), and `primIssue` gained the inline
+// regex branch, which every primitive consumer carries (+~120 B: primitive 1,026 → ~1,150, struct
+// 2,286 → ~2,400). Budgets ~10% above those measurements.
+const budgets = { resultDirect: 160, decoderDirect: 2700, primitiveDirect: 1300, interopDirect: 220, concurrentDirect: 800, switchDirect: 900, full: 24_500, testing: 1600 };
 try {
   for (const [name, code] of Object.entries(cases)) {
     const input = join(work, `${name}.mjs`);
