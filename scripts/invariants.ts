@@ -16,7 +16,7 @@ type Rule = { readonly id: string; readonly pattern: RegExp; readonly allow: Rea
 /** Files in src/ that may contain a construct, and why. Keep this list short and justified. */
 const SRC_RULES: ReadonlyArray<Rule> = [
   { id: "no-throw", pattern: /\bthrow\b/, allow: ["src/match.ts"], fix: "return err(...) on the error track; `throw` is reserved for assertNever (a defect)" },
-  { id: "no-try", pattern: /\btry\s*\{/, allow: ["src/result.ts", "src/async.ts", "src/decode.ts"], fix: "wrap the throwing call with R.fromThrowable / Async.tryPromise at the interop edge" },
+  { id: "no-try", pattern: /\btry\s*\{/, allow: ["src/result.ts", "src/async.ts", "src/decode-core.ts", "src/decode-compile.ts"], fix: "wrap the throwing call with R.fromThrowable / Async.tryPromise at the interop edge" },
   { id: "no-catch-method", pattern: /\.catch\(/, allow: [], fix: "use Async.fromPromise(promise, onReject) — a railway promise never rejects" },
   { id: "no-any", pattern: /:\s*any\b|\bas any\b|<any>/, allow: [], fix: "use `unknown` and decode it, or a precise type" },
   { id: "no-ts-suppression", pattern: /@ts-(ignore|expect-error|nocheck)/, allow: [], fix: "fix the type error; suppressions hide the proof the compiler gives you" },
@@ -28,7 +28,7 @@ const SRC_RULES: ReadonlyArray<Rule> = [
   { id: "no-platform-random", pattern: /Math\.random\(|randomUUID\(/, allow: ["src/capabilities.ts"], fix: "take a Random / IdGen capability instead" },
   { id: "no-platform-timers", pattern: /\bsetTimeout\(|\bsetInterval\(/, allow: ["src/capabilities.ts", "src/async.ts"], fix: "take a Sleeper capability; timers belong to capabilities.ts (withTimeout is the documented exception)" },
   { id: "no-node-imports", pattern: /from\s+["']node:/, allow: [], fix: "src/ must run in browsers and edge runtimes; use web-standard APIs only" },
-  { id: "no-unknown-cast", pattern: /as unknown as/, allow: ["src/result.ts", "src/async.ts", "src/decode.ts"], fix: "a double cast forges a type; only the listed files may use it, each occurrence justified by a comment" },
+  { id: "no-unknown-cast", pattern: /as unknown as/, allow: ["src/result.ts", "src/async.ts", "src/decode-core.ts", "src/decode-internal.ts", "src/decode-compile.ts"], fix: "a double cast forges a type; only the listed files may use it, each occurrence justified by a comment" },
   { id: "no-non-null-assertion", pattern: /[A-Za-z0-9_)\]]!\./, allow: [], fix: "narrow with a check or an Option; `!` is an unproven claim" },
   { id: "no-let-for-mutation-escape", pattern: /\bexport\s+let\b/, allow: [], fix: "exported bindings are immutable: export const" },
 ];
@@ -42,7 +42,11 @@ const LAYERS: Readonly<Record<string, ReadonlyArray<string>>> = {
   "src/result.ts": [],
   "src/option.ts": ["src/result.ts"],
   "src/capabilities.ts": [],
-  "src/decode.ts": ["src/brand.ts", "src/option.ts", "src/result.ts"],
+  "src/decode-internal.ts": ["src/option.ts", "src/result.ts"],
+  "src/decode-core.ts": ["src/brand.ts", "src/option.ts", "src/result.ts", "src/decode-internal.ts"],
+  "src/decode-dates.ts": ["src/decode-core.ts", "src/result.ts"],
+  "src/decode-compile.ts": ["src/option.ts", "src/decode-internal.ts"],
+  "src/decode.ts": ["src/decode-core.ts", "src/decode-dates.ts", "src/decode-compile.ts"],
   "src/async.ts": ["src/result.ts", "src/capabilities.ts", "src/tagged.ts"],
   "src/lanes.ts": ["src/result.ts", "src/tagged.ts", "src/capabilities.ts", "src/async.ts"],
   "src/testing.ts": ["src/result.ts", "src/option.ts", "src/decode.ts"],

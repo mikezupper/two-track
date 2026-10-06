@@ -5,7 +5,7 @@
  *   pnpm --filter two-track-bench-cross bench      (or: node decoders-vs.mjs [--json])
  *
  * Report only — third-party versions drift, so there is no threshold. The
- * correctness line asserts that all four libraries agree on which objects are
+ * correctness line asserts that all libraries agree on which objects are
  * valid; disagreement exits 1 because then the timing rows measure different work.
  * two-track is imported from the built dist so the comparison is build vs build.
  */
@@ -18,7 +18,7 @@ import { type } from "arktype";
 const require = createRequire(import.meta.url);
 // Pinned exact versions live in this workspace's package.json (some packages do not export their own package.json).
 const pinned = require("./package.json").devDependencies;
-const versions = { "two-track": require("../../package.json").version, zod: pinned.zod, valibot: pinned.valibot, arktype: pinned.arktype };
+const versions = { "two-track": require("../../package.json").version, "two-track+compile": require("../../package.json").version, zod: pinned.zod, valibot: pinned.valibot, arktype: pinned.arktype };
 
 // ---------- the one schema, four ways ----------
 const ID = /^u_[0-9a-f]{8}$/;
@@ -33,6 +33,7 @@ const TT = D.struct({
   address: D.struct({ street: D.nonEmptyString, zip: D.pattern(ZIP) }),
   newsletter: D.optional(D.boolean),
 });
+const TTC = D.compile(TT); // opt-in code-generated decoder (decision 0014)
 
 const ZZ = z.object({
   id: z.string().regex(ID),
@@ -83,12 +84,14 @@ const jsonStrings = valid.slice(0, JSON_N).map((o) => JSON.stringify(o));
 // ---------- runners: each returns the number of VALID objects ----------
 const runners = {
   "two-track": (xs) => { let n = 0; for (let i = 0; i < xs.length; i++) if (TT.decode(xs[i]).ok) n++; return n; },
+  "two-track+compile": (xs) => { let n = 0; for (let i = 0; i < xs.length; i++) if (TTC.decode(xs[i]).ok) n++; return n; },
   zod: (xs) => { let n = 0; for (let i = 0; i < xs.length; i++) if (ZZ.safeParse(xs[i]).success) n++; return n; },
   valibot: (xs) => { let n = 0; for (let i = 0; i < xs.length; i++) if (v.safeParse(VV, xs[i]).success) n++; return n; },
   arktype: (xs) => { let n = 0; for (let i = 0; i < xs.length; i++) if (!(AA(xs[i]) instanceof type.errors)) n++; return n; },
 };
 const jsonRunners = {
   "two-track": (ss) => { let n = 0; for (let i = 0; i < ss.length; i++) if (TT.decode(JSON.parse(ss[i])).ok) n++; return n; },
+  "two-track+compile": (ss) => { let n = 0; for (let i = 0; i < ss.length; i++) if (TTC.decode(JSON.parse(ss[i])).ok) n++; return n; },
   zod: (ss) => { let n = 0; for (let i = 0; i < ss.length; i++) if (ZZ.safeParse(JSON.parse(ss[i])).success) n++; return n; },
   valibot: (ss) => { let n = 0; for (let i = 0; i < ss.length; i++) if (v.safeParse(VV, JSON.parse(ss[i])).success) n++; return n; },
   arktype: (ss) => { let n = 0; for (let i = 0; i < ss.length; i++) if (!(AA(JSON.parse(ss[i])) instanceof type.errors)) n++; return n; },
@@ -97,6 +100,7 @@ const jsonRunners = {
 // ---------- correctness: every library must classify every object the same way ----------
 const classify = {
   "two-track": (x) => TT.decode(x).ok,
+  "two-track+compile": (x) => TTC.decode(x).ok,
   zod: (x) => ZZ.safeParse(x).success,
   valibot: (x) => v.safeParse(VV, x).success,
   arktype: (x) => !(AA(x) instanceof type.errors),
@@ -113,6 +117,7 @@ const agree = disagreements === 0 && Object.values(counts).every((c) => c === ex
 const bad = mixed[0];
 const issueCounts = {
   "two-track": (() => { const r = TT.decode(bad); return r.ok ? 0 : r.error.issues.length; })(),
+  "two-track+compile": (() => { const r = TTC.decode(bad); return r.ok ? 0 : r.error.issues.length; })(),
   zod: ZZ.safeParse(bad).error?.issues.length ?? 0,
   valibot: v.safeParse(VV, bad).issues?.length ?? 0,
   arktype: (() => { const r = AA(bad); return r instanceof type.errors ? r.length : 0; })(),
@@ -141,12 +146,13 @@ if (process.argv.includes("--json")) {
   console.log(JSON.stringify({ runtime, N, JSON_N, versions, rows, agreement: { agree, disagreements, counts, expectedValid, issueCounts } }, null, 2));
 } else {
   console.log(`${runtime} — decoders: ${N.toLocaleString()} objects valid / 10% invalid (2 field errors each) / ${JSON_N.toLocaleString()} JSON strings, best of 7\n`);
-  console.log(`${"library".padEnd(12)} ${"version".padEnd(8)} ${"valid ms".padStart(9)} ${"10%-bad ms".padStart(11)} ${"json ms".padStart(8)} ${"ns/valid obj".padStart(13)}`);
-  for (const r of rows) console.log(`${r.library.padEnd(12)} ${r.version.padEnd(8)} ${r.validMs.toFixed(1).padStart(9)} ${r.invalidMs.toFixed(1).padStart(11)} ${r.jsonMs.toFixed(1).padStart(8)} ${r.nsPerValid.toFixed(0).padStart(13)}`);
-  console.log(`\ncorrectness: ${agree ? "all four libraries agree" : "DISAGREEMENT"} — valid counts ${JSON.stringify(counts)} (expected ${expectedValid}); issues on the 2-error object ${JSON.stringify(issueCounts)}`);
+  console.log(`${"library".padEnd(18)} ${"version".padEnd(8)} ${"valid ms".padStart(9)} ${"10%-bad ms".padStart(11)} ${"json ms".padStart(8)} ${"ns/valid obj".padStart(13)}`);
+  for (const r of rows) console.log(`${r.library.padEnd(18)} ${r.version.padEnd(8)} ${r.validMs.toFixed(1).padStart(9)} ${r.invalidMs.toFixed(1).padStart(11)} ${r.jsonMs.toFixed(1).padStart(8)} ${r.nsPerValid.toFixed(0).padStart(13)}`);
+  console.log(`\ncorrectness: ${agree ? "all libraries agree" : "DISAGREEMENT"} — valid counts ${JSON.stringify(counts)} (expected ${expectedValid}); issues on the 2-error object ${JSON.stringify(issueCounts)}`);
   const tt = rows[0];
+  const ttc = rows[1];
   const fastest = rows.reduce((m, r) => (r.validMs < m.validMs ? r : m));
-  console.log(`summary: two-track ${tt.nsPerValid.toFixed(0)} ns/object valid; fastest valid path ${fastest.library} ${fastest.nsPerValid.toFixed(0)} ns; two-track/fastest = ${(tt.validMs / fastest.validMs).toFixed(2)}x`);
+  console.log(`summary: two-track ${tt.nsPerValid.toFixed(0)} ns/object valid (interpreter), ${ttc.nsPerValid.toFixed(0)} ns compiled; fastest valid path ${fastest.library} ${fastest.nsPerValid.toFixed(0)} ns; interpreter/fastest = ${(tt.validMs / fastest.validMs).toFixed(2)}x, compiled/fastest = ${(ttc.validMs / fastest.validMs).toFixed(2)}x`);
 }
 if (!agree) {
   console.error("decoders-vs: libraries disagree on validity — timing rows would measure different work");

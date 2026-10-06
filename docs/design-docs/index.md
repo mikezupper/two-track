@@ -35,3 +35,4 @@ Status: accepted | superseded by NNNN | rejected        Date: YYYY-MM-DD
 | [0011](decisions/0011-testing-helpers-inject-fast-check.md) | `two-track/testing` law/round-trip helpers take fast-check as a parameter; no dependency | accepted | `test/testing.test.ts` |
 | [0012](decisions/0012-coverage-in-the-complete-check.md) | Coverage per file, negative invariant tests and the checker are part of the complete check | accepted | both coverage configs; `pnpm check` |
 | [0013](decisions/0013-consumer-bundles-and-measured-hot-paths.md) | Additive module subpaths, consumer bundle budgets and measured allocation reductions | accepted | bundle and consumer checks; hot-path benchmarks |
+| [0014](decisions/0014-decoder-hot-path-and-compile.md) | Decoder protocol rewritten for speed (value-or-Failure, inline primitives); `D.compile` opt-in literal-key codegen with CSP fallback | accepted | `test/decode-compile.test.ts` equivalence properties; `bench/cross` rows |

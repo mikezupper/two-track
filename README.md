@@ -91,14 +91,15 @@ Consumer bundles are also measured with Rolldown and esbuild. Direct subpath imp
 
 **Decoders versus the field** (`pnpm bench:cross`; identical schema, non-throwing APIs, 200k objects, best of 7; all four agree on validity)
 
-| Library | Node 24, valid | Node 24, 10% invalid | Bun 1.3, valid | ns per valid object (Node) |
+| Library | Node 24, valid | Node 24, 10% invalid | Bun 1.3, valid | ns per valid object (Node / Bun) |
 |---|---|---|---|---|
-| two-track 0.1.0 | 171 ms | 175 ms | 103 ms | 855 |
-| zod 4.6.5 | 204 ms | 237 ms | 149 ms | 1021 |
-| valibot 1.5.0 | 223 ms | 231 ms | 151 ms | 1116 |
-| arktype 2.2.7 | **46 ms** | 286 ms | **35 ms** | **230** |
+| two-track 0.1.0, interpreter | 140 ms | 140 ms | 67 ms | 699 / 335 |
+| two-track 0.1.0, `D.compile` | **60 ms** | **62 ms** | 35 ms | **299 / 173** |
+| zod 4.6.5 | 176 ms | 215 ms | 131 ms | 881 / 657 |
+| valibot 1.5.0 | 209 ms | 215 ms | 133 ms | 1045 / 665 |
+| arktype 2.2.7 | **43 ms** | 267 ms | **32 ms** | **213 / 160** |
 
-Honest reading: two-track's decoders are 15–30% faster than Zod and Valibot and the fastest when input is partly invalid, but ArkType's JIT-compiled validator is 3–4x faster on valid input. If decoding valid input is your bottleneck, ArkType wins and this README says so; the profile of where two-track's nanoseconds go is in the benchmarks file and is tracked as the next optimization target.
+Honest reading: the interpreter is 20–35% faster than Zod and Valibot. ArkType's JIT-compiled validator is still the fastest on valid input, because literal-key code is the only way below the ~94 ns floor of a generic keyed loop. `D.compile` generates that code for the structural subset and lands within 1.4x of ArkType on Node and 8% on Bun, 4x ahead of it when input is partly invalid, and at parity when the input is JSON text. It is opt-in because it uses `new Function`; where that is forbidden it returns the interpreter unchanged. Before the rewrite the interpreter stood at 855 ns, 3.7x behind; the profile, the floor measurement and the A/B are in the benchmarks file.
 
 Three conclusions drive the whole design:
 
@@ -159,6 +160,10 @@ Every combinator takes the data as its first argument: `R.map(result, f)`, not `
 
 The one rule that matters most, an ignored `Result`, needs the compiler's type information, and TypeScript 7 has no JavaScript API. So `two-track-check` is its own dev-time package with its own dependencies, and the library keeps zero. The scaffolded per-project invariants script is retired in favour of it.
 
+### Decision 14: A faster decoder protocol, and `compile` as an opt-in
+
+The interpreter allocates one `Result` per decode instead of per field, passes keys down instead of pushing them onto the path, fuses primitive refinements, and checks primitive fields inline from one descriptor per field. That is 1.2–1.5x and leaves it ~1.7x above the generic-loop floor. `D.compile` generates literal-key code for the structural subset and calls the interpreter for everything else, so it is equivalent by construction and property-tested as such; it is opt-in because it uses `new Function`, and it falls back to the interpreter where that is forbidden.
+
 ### Decision 11: Testing helpers inject fast-check
 
 `two-track/testing` takes the fast-check module as a parameter typed by a minimal structural interface. The package gains law and round-trip helpers without gaining a dependency, which is the same capability-injection idiom the rest of the library uses.
@@ -175,7 +180,11 @@ src/
 ├── tagged.ts        Tagged<Tag, Fields>, tagged() constructors, hasTag guards — the shape of every error and variant
 ├── match.ts         match / matchBy (exhaustive by type) and assertNever (the one sanctioned defect)
 ├── fn.ts            pipe, identity, constant
-├── decode.ts        Decoder<A>: primitives, refinements, brand, struct/array/record/taggedUnion/oneOf/json/lazy
+├── decode.ts        public decoder surface (D, two-track/decode) over:
+├── decode-internal.ts   the protocol: Failure marker, inline primitive check, field/node metadata
+├── decode-core.ts       primitives + fused refinements, brand, struct/array/record/taggedUnion/oneOf/json/lazy
+├── decode-dates.ts      isoDate (strict), dateFromString (permissive, named so)
+├── decode-compile.ts    D.compile: opt-in literal-key codegen, CSP fallback
 ├── capabilities.ts  Clock, Sleeper, Random, IdGen — system and deterministic implementations
 ├── async.ts         AsyncResult, fromPromise/tryPromise, mapConcurrent, validateConcurrent, retry/backoff, withTimeout
 ├── lanes.ts         trigger coordination: switchLane, exhaustLane, queueLane, debounce, throttle, semaphore
@@ -191,7 +200,7 @@ tools/
 |---|---|---|
 | Core algebra | `result`, `brand`, `tagged`, `match`, `fn`, `capabilities` | nothing |
 | Core algebra, derived | `option` | `result` |
-| Boundary | `decode` | `result`, `option`, `brand` |
+| Boundary | `decode-internal`, `decode-core`, `decode-dates`, `decode-compile`, `decode` | `result`, `option`, `brand` (and each other, lowest first) |
 | Shell | `async`, `lanes` | `result`, `capabilities` (+ `tagged`, `async` for lanes) |
 | Test support | `testing` | `result`, `option`, `decode` |
 | Surface | `index` | anything |
@@ -270,6 +279,12 @@ type PlaceOrder = Infer<typeof PlaceOrder>;
 const r = PlaceOrder.decode(await req.json());   // Result<DecodeError, PlaceOrder>
 if (!r.ok) return respond(400, D.formatIssues(r.error));
 // r.value.email is Brand<string, "Email">; nothing downstream re-checks it
+```
+
+```ts
+// CPU-bound path decoding many valid objects? Compile it. Same semantics by construction
+// (property-tested), literal-key code, 2–4x the interpreter; a no-op where new Function is forbidden.
+const PlaceOrderFast = D.compile(PlaceOrder);
 ```
 
 Decoders accumulate every issue in a struct or array with its path (`lines.1.qty: expected >= 1`), because boundaries should report all problems at once. The decoder is the smart constructor: `D.brand` is the one place a brand is applied, and it sits behind the checks that justify it. `D.taggedUnion("kind", {...})` decodes discriminated unions by picking the variant and reports only that branch's issues; `D.oneOf(...)` tries alternatives and, on failure, reports every alternative's issues prefixed `alternative N:`; `D.json` parses and decodes in one step; `D.lazy` handles recursive shapes; `D.custom` wraps any type guard. Names are contracts: `D.isoDate` accepts strict ISO-8601 only (date, or date-time with an offset) and rejects calendar-invalid dates, while `D.dateFromString` is the engine's permissive grammar under a name that says so.

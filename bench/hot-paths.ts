@@ -10,6 +10,7 @@ const N = 200_000;
 const user = { name: "Ada", age: 37 };
 const users = Array.from({ length: 20 }, () => user);
 const person = D.struct({ name: D.nonEmptyString, age: D.integer });
+const personCompiled = D.compile(person);
 const list = D.array(person);
 const alternative = D.oneOf(person, D.string);
 const integerList = D.array(D.integer);
@@ -31,6 +32,11 @@ console.log(`${process.version}, decode N=${N}, async batches=2000 x 40 (all-suc
 measure("struct success", () => {
   let sum = 0;
   for (let i = 0; i < N; i++) { const r = person.decode(user); if (r.ok) sum += r.value.age; }
+  return sum;
+}, N * user.age);
+measure("struct success (D.compile)", () => {
+  let sum = 0;
+  for (let i = 0; i < N; i++) { const r = personCompiled.decode(user); if (r.ok) sum += r.value.age; }
   return sum;
 }, N * user.age);
 measure("array of structs success", () => {

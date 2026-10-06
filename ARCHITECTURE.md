@@ -35,7 +35,11 @@ One library package with a root entry, direct module subpaths and the separate `
 | `src/match.ts` | `match`, `matchBy` (exhaustive by type), `assertNever` (the one `throw`) | — | 45 |
 | `src/fn.ts` | `pipe`, `identity`, `constant` | — | 30 |
 | `src/capabilities.ts` | `Clock`, `Sleeper`, `Random`, `IdGen`; system + deterministic implementations. The only module allowed to touch platform time/random/timers | — | 110 |
-| `src/decode.ts` | `Decoder<A>`; primitives, refinements, `brand`, containers, `taggedUnion`, `oneOf`, `json`, `lazy` | `result`, `option`, `brand` | 300 |
+| `src/decode-internal.ts` | The decoder protocol shared by the modules below: `Failure` marker, `fail`/`merge`, `make`, `primIssue` (inline primitive check), `Field`/`Node` metadata. Not re-exported | `result`, `option` | 150 |
+| `src/decode-core.ts` | Primitives with fused checks, refinements, `brand`, containers (`struct` with per-field descriptors and inline primitives), `taggedUnion`, `oneOf`, `json`, `lazy` | `decode-internal`, `result`, `option`, `brand` | 335 |
+| `src/decode-dates.ts` | `isoDate` (strict), `dateFromString` (permissive, named so) | `decode-core`, `result` | 55 |
+| `src/decode-compile.ts` | `compile`: opt-in literal-key code generation for the structural subset; opaque nodes call `run`; falls back when `new Function` is forbidden (decision 0014) | `decode-internal`, `option` | 190 |
+| `src/decode.ts` | Public decoder surface: re-exports core + dates + `compile` (`D`, `two-track/decode`) | the three above | 10 |
 | `src/async.ts` | `AsyncResult`; `fromPromise`/`tryPromise`; `mapConcurrent`/`validateConcurrent`/`all`; `retry`/`backoff` (`retriable` required); `withTimeout` | `result`, `capabilities`, `tagged` | 295 |
 | `src/lanes.ts` | Trigger coordination (decision 0009): `switchLane`, `exhaustLane`, `queueLane`, `debounce`, `throttle`, `semaphore`; errors `Superseded`/`Busy`/`QueueFull` | `result`, `tagged`, `capabilities`, `async` | 250 |
 | `src/testing.ts` | `two-track/testing` entry (decision 0011): `arbResult`/`arbOption`/`arbDecoded`, `functorLaws`/`monadLaws`, `decoderRoundTrip`/`decoderNeverThrows`/`decoderDoesNotMutate`; fast-check injected | `result`, `option`, `decode` | 150 |
@@ -48,7 +52,7 @@ Lowest first. A module may import only from layers below it (and within the "cor
 
 1. **Core algebra** — `result`, `brand`, `tagged`, `match`, `fn`, `capabilities`. Import nothing.
 2. **Derived algebra** — `option` → `result`.
-3. **Boundary** — `decode` → `result`, `option`, `brand`.
+3. **Boundary** — `decode-internal` → `result`, `option`; `decode-core` → `decode-internal`, `result`, `option`, `brand`; `decode-dates` → `decode-core`, `result`; `decode-compile` → `decode-internal`, `option`; `decode` re-exports core, dates and `compile`.
 4. **Shell** — `async` → `result`, `capabilities`, `tagged`; `lanes` → `result`, `tagged`, `capabilities`, `async`.
 5. **Test support** — `testing` → `result`, `option`, `decode` (published separately as `two-track/testing`; never imported by `index`).
 6. **Surface** — `index` → anything.

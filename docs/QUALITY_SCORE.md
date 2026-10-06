@@ -10,7 +10,7 @@ Graded per module on four axes: **Types** (does the signature say everything), *
 | `tagged.ts` | A | A | B | A | authoritative tag and conflicting-field types tested; `tagged()` spreads fields (cold path: errors only) |
 | `match.ts` | A | A | A | A | compile-time exhaustiveness tested with `@ts-expect-error` |
 | `fn.ts` | A | A | A | B | `pipe` overloads to 8; no `flow` (by design, add on demand) |
-| `decode.ts` | A | A | B | A | round-trip, regex state, own-property and 300,000-issue regressions; strict `isoDate` + `dateFromString`; `oneOf` reports every alternative; measured vs Zod/Valibot (15–30% faster) and ArkType (3–4x slower on valid input — tracked optimization target) |
+| `decode-*.ts` | A | A | A | A | round-trip, regex state, own-property and 300,000-issue regressions; strict `isoDate`; `oneOf` reports every alternative; interpreter 1.2–1.5x faster after the protocol rewrite; `compile` proven equivalent by property (1,100+ generated cases) and CSP fallback tested; vs the field: 20–35% faster than Zod/Valibot interpreted, compiled within 1.4x of ArkType on valid input and 4x faster on invalid |
 | `capabilities.ts` | A | A | A | A | seeded PRNG determinism tested |
 | `async.ts` | A | A | A | A | model-based schedules, abort points and leak checks; cancellation signatures tested; map/validation CPU overhead now benchmarked |
 | `lanes.ts` | A | A | A | A | model-based properties and cancellation races; every lane's per-trigger cost measured with ratio gates in the check; semaphore queue made linear |

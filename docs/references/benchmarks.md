@@ -36,18 +36,30 @@ Row H is within noise of A; the singleton is kept for `none`/`unit` because it i
 
 ## Decoders versus Zod, Valibot and ArkType (`pnpm bench:cross` → `bench/cross/decoders-vs.mjs`)
 
-Recorded 2026-10-05. Identical schema in all four libraries (branded-ish id pattern, email pattern, integer 0–150, array of non-empty strings, nested address with a zip pattern, optional boolean); each library's non-throwing API; best of 7; all four agree on which objects are valid (asserted; 180,000 of 200,000). Versions pinned in `bench/cross/package.json`: zod 4.6.5, valibot 1.5.0, arktype 2.2.7. ArkType uses the same email regex as the others rather than its stricter built-in.
+Recorded 2026-10-06 after the decoder protocol rewrite and `D.compile` (decision 0014). Identical schema in all libraries (id pattern, email pattern, integer 0–150, array of non-empty strings, nested address with a zip pattern, optional boolean); each library's non-throwing API; best of 7; every library agrees on which objects are valid (asserted; 180,000 of 200,000) and reports exactly two issues on the two-error object. Versions pinned in `bench/cross/package.json`: zod 4.6.5, valibot 1.5.0, arktype 2.2.7. ArkType uses the same email regex as the others rather than its stricter built-in.
 
-| Library | Node 24: 200k valid | 200k with 10% invalid (2 issues each) | 50k from JSON text | ns per valid object | Bun 1.3: valid | 10% invalid | JSON |
-|---|---|---|---|---|---|---|---|
-| two-track 0.1.0 | 171 ms | 175 ms | 101 ms | 855 | 103 ms | 104 ms | 76 ms |
-| zod 4.6.5 | 204 ms | 237 ms | 107 ms | 1021 | 149 ms | 176 ms | 87 ms |
-| valibot 1.5.0 | 223 ms | 231 ms | 111 ms | 1116 | 151 ms | 150 ms | 94 ms |
-| arktype 2.2.7 | **46 ms** | 286 ms | 62 ms | **230** | **35 ms** | 174 ms | 54 ms |
+| Library | Node 24: 200k valid | 200k with 10% invalid | 50k from JSON text | ns / valid object | Bun 1.3: valid | 10% invalid | JSON | ns / valid |
+|---|---|---|---|---|---|---|---|---|
+| two-track 0.1.0 (interpreter) | 140 ms | 140 ms | 80 ms | 699 | 67 ms | 68 ms | 59 ms | 335 |
+| two-track 0.1.0 `D.compile` | **60 ms** | **62 ms** | 56 ms | **299** | 35 ms | **36 ms** | 50 ms | 173 |
+| zod 4.6.5 | 176 ms | 215 ms | 96 ms | 881 | 131 ms | 157 ms | 75 ms | 657 |
+| valibot 1.5.0 | 209 ms | 215 ms | 99 ms | 1045 | 133 ms | 143 ms | 82 ms | 665 |
+| arktype 2.2.7 | **43 ms** | 267 ms | **52 ms** | **213** | **32 ms** | 171 ms | 51 ms | **160** |
 
-Reading, stated plainly: two-track is 15–30% faster than Zod and Valibot on every workload, and it is the fastest when 10% of the input is invalid, because its issue objects are cheap. ArkType's JIT-compiled validator is **3.7x faster on Node and 3.0x on Bun on valid input**; its error construction is expensive, which is why it falls to last on the invalid workload. The earlier README claim that hand-written `typeof` decoders are "as fast as compiled validators" was false for the valid path and has been removed.
+Reading: the interpreter is 20–35% faster than Zod and Valibot and the fastest interpreter when input is partly invalid. Compiled two-track is within 1.4x of ArkType on valid input on Node and within 8% on Bun, 4x faster than ArkType when 10% of the input is invalid (its issue objects are cheap), and at parity on the JSON-text path, where `JSON.parse` dominates. The previous recording (2026-10-05, before the rewrite): interpreter 855 ns on Node, 3.7x behind ArkType.
 
-Where two-track's 855 ns goes on this schema (Node, same data): the full schema 761 ns in isolation; the same schema with its three regex patterns replaced by `D.string` 518 ns; a flat four-primitive struct 218 ns; the bare cost of the three `regex.test` calls 161 ns. So roughly 240 ns is regex plus the `refine`/`pattern` layering, ~300 ns is nesting, the array, and the stacked `max(min(integer))` refinements, and ~220 ns is the base struct walk. The avoidable parts are the per-field `path.push`/`pop` on the success path and the closure layers of stacked refinements; tracked in tech debt with this profile as the baseline.
+## Decoder floor and A/B (`node _ab.ts`-style interleaved runs, 2026-10-06)
+
+Same-process, interleaved, best of 9 over 200k objects; this is the measurement that decided decision 0014.
+
+| Case | Old interpreter | New interpreter | Compiled |
+|---|---|---|---|
+| bench schema, valid | 730 ns | 615 ns (1.19x) | 263 ns (2.8x) |
+| bench schema, 10% invalid | 783 ns | 698 ns (1.12x) | 298 ns (2.6x) |
+| same schema with the three regexes removed | 576 ns | 484 ns (1.19x) | 121 ns (4.8x) |
+| flat four-primitive struct | 219 ns | 166 ns (1.32x) | 55 ns (4.0x) |
+
+The floor that explains the shape of these numbers (four-field object, Node 24): a hand-written generic loop over a key array, `obj[key]` + `typeof` + `out[key] =`, takes **94 ns**; the same checks written with literal keys take **13 ns**; literal keys returning the input object (no output allocation) take **10 ns**. Generic keyed property access is the interpreter's floor; literal keys need code generation; not allocating an output means aliasing the input and leaking undeclared keys, which two-track does not do.
 
 ## Railway versus Ramda and Effect (`pnpm bench:cross` → `bench/cross/railway-vs.mjs`)
 

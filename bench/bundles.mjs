@@ -36,7 +36,13 @@ const sizes = {};
 // calendar validation and `oneOf` started reporting every alternative's issues (~1 kB of real
 // behaviour). Selective consumers did not move; the full-surface budget is a regression tripwire,
 // not a target.
-const budgets = { resultDirect: 160, decoderDirect: 1250, primitiveDirect: 350, interopDirect: 220, concurrentDirect: 800, switchDirect: 900, full: 16_000, testing: 1600 };
+// 2026-10-06 (decision 0014): the decoder protocol changed for speed (value-or-Failure, inline
+// primitive checks with their messages, struct field descriptors) and `D.compile` was added.
+// Selective decoder consumers grew ~1 kB (primitive 301 → 1,026 B, struct 1,119 → 2,286 B) for
+// 1.2–1.5x interpreter speed; `compile` itself is NOT retained unless imported (verified with
+// esbuild: no `new Function` in a struct-only consumer). The full-surface bundle includes the
+// compiler (~4 kB). Budgets below are tripwires set ~10% above those measurements.
+const budgets = { resultDirect: 160, decoderDirect: 2500, primitiveDirect: 1150, interopDirect: 220, concurrentDirect: 800, switchDirect: 900, full: 22_500, testing: 1600 };
 try {
   for (const [name, code] of Object.entries(cases)) {
     const input = join(work, `${name}.mjs`);
