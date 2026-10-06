@@ -119,7 +119,8 @@ export const functorLaws = <F>(
  *   left identity:  andThen(of(a), f) == f(a)
  *   right identity: andThen(fa, of) == fa
  *   associativity:  andThen(andThen(fa, f), g) == andThen(fa, x => andThen(f(x), g))
- * `arbKleisli` generates the `f`/`g` functions, e.g. `fc.func(arbF)`.
+ * `arbKleisli` generates the `f`/`g` functions; omit it and they are derived from
+ * `arb`/`of`/`andThen` (the returned structural `Arb` cannot be handed to `fc.func`).
  */
 export const monadLaws = <F>(
   fc: FastCheckLike,

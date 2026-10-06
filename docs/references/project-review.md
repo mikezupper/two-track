@@ -1,5 +1,7 @@
 # Project review — 2026-10-05
 
+> **Point-in-time document.** This is the review as it was written on 2026-10-05; later work superseded parts of it, and those parts are left as history. Superseded since: the full-surface bundle size (~13.6 kB then; ~20.7 kB after strict `isoDate`, `oneOf` reporting every alternative, the decoder protocol rewrite and `D.compile` — see [benchmarks](benchmarks.md#consumer-bundles) and [decision 0014](../design-docs/decisions/0014-decoder-hot-path-and-compile.md)); the "remaining limitations" on `isoDate` (now strict, [0006 amendment](../design-docs/decisions/0006-decoders-accumulate-with-path-stack.md)), `oneOf` (now reports all alternatives, same amendment) and lane throughput (now measured with gates, [0009 amendment](../design-docs/decisions/0009-lanes-trigger-coordination.md)); and the test counts (196 root tests and 39 checker tests at the time of the decision 0014 work). The method and the findings it fixed are still accurate.
+
 Reviewed the complete library, the separate `two-track-check` implementation, tests, benchmarks, package/build scripts, architecture enforcement and CI/release configuration. Confirmed defects were reproduced with failing regressions before fixes. The final work keeps the Result/Option encodings and zero runtime dependencies.
 
 ## Findings and changes

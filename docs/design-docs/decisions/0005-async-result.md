@@ -8,7 +8,7 @@ Asynchronous railways can be a lazy `Task`/`Future` type (Fluture, fp-ts `TaskEi
 
 ## Decision
 
-`AsyncResult<E, A> = Promise<Result<E, A>>`, no wrapper type. The railway rule: a promise on the railway never rejects; rejection is reserved for defects. `Async.fromPromise` and `Async.tryPromise` are the conversion points from the rejecting world. Every long-running combinator (`mapConcurrent`, `retry`, `withTimeout`, `tryPromise`) accepts and threads an `AbortSignal`, and `mapConcurrent` aborts in-flight work on the first failure.
+`AsyncResult<E, A> = Promise<Result<E, A>>`, no wrapper type. The railway rule: a promise on the railway never rejects; rejection is reserved for defects. `Async.fromPromise` and `Async.tryPromise` are the conversion points from the rejecting world. Every long-running combinator (`mapConcurrent`, `validateConcurrent`, `retry`, `withTimeout`, `tryPromise`) accepts and threads an `AbortSignal`, and `mapConcurrent` aborts in-flight work on the first failure.
 
 ## Evidence
 
@@ -42,5 +42,5 @@ See [review regressions](../../../test/async.properties.test.ts) for generated c
 ## Consequences
 
 - `no-catch-method` invariant; `.then(ok, onRejected)` is the internal idiom.
-- `Async.retry`, `withTimeout` take a `Sleeper` / use `setTimeout` (the one documented timer outside `capabilities.ts`).
+- `Async.retry` takes a `Sleeper`; `withTimeout` is the one documented `setTimeout` outside `capabilities.ts`.
 - Tests cover: never-rejects, peak concurrency, fail-fast abort, outer-signal propagation, timeout vs parent-abort.

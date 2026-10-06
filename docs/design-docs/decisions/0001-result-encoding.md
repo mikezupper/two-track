@@ -32,6 +32,6 @@ The monomorphic-shape folklore does not hold on current V8/JSC: the extra `undef
 
 ## Consequences
 
-- Hot paths use early returns (`if (!r.ok) return r`) and are at the baseline; combinators (`R.andThen`) add one closure and stay under 2x. `bench:check` enforces < 4x.
+- Hot paths use early returns (`if (!r.ok) return r`) and are at the baseline; combinators (`R.andThen`) add one closure and stay around 1.8x in the source-level `bench:check` gate (enforced < 4x); measured on the built `dist` with a 5-rep harness (`bench/cross/railway-vs.mjs`) the same ratio reads 2.3–3.0x, which is build-form and harness variance, not a regression.
 - `no-class` invariant in `src/`.
 - Renaming `ok`/`value`/`error` or `some` is a major version.

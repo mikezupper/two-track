@@ -62,7 +62,7 @@ All numbers are from the benchmark scripts in [`bench/`](bench/) on a Linux work
 
 **Encodings of the same railway, one million items**
 
-Consumer bundles are also measured with Rolldown and esbuild. Direct subpath imports avoid esbuild retaining an entire namespace: the Result example is **117 bytes minified** and the struct decoder example is **1,124 bytes**, versus 1,551 and 4,279 through root namespaces. See [the methods and measurements](docs/references/benchmarks.md#consumer-bundles).
+Consumer bundles are also measured with Rolldown and esbuild (recorded 2026-10-06). Direct subpath imports avoid esbuild retaining an entire namespace: the Result example is **117 bytes minified** and the struct decoder example is **2,300 bytes** (1,124 before the decoder protocol rewrite, which bought 1.2–1.5x speed), versus 1,551 and 10,590 through root namespaces. See [the methods and measurements](docs/references/benchmarks.md#consumer-bundles).
 
 | Encoding | Node 24 | Bun 1.3 |
 |---|---|---|
@@ -160,13 +160,21 @@ Every combinator takes the data as its first argument: `R.map(result, f)`, not `
 
 The one rule that matters most, an ignored `Result`, needs the compiler's type information, and TypeScript 7 has no JavaScript API. So `two-track-check` is its own dev-time package with its own dependencies, and the library keeps zero. The scaffolded per-project invariants script is retired in favour of it.
 
+### Decision 11: Testing helpers inject fast-check
+
+`two-track/testing` takes the fast-check module as a parameter typed by a minimal structural interface. The package gains law and round-trip helpers without gaining a dependency, which is the same capability-injection idiom the rest of the library uses. The arbitraries it returns are structural too, so handing one back to `fc.record` or `fc.func` needs a cast in the test (tracked in tech debt).
+
+### Decision 12: Coverage is part of the complete check
+
+`pnpm check` runs the tests with coverage and enforces 95% statements, lines and functions and 90% branches per executable file, in both the library and the checker package. A gate that is not in the definition of done is advice.
+
+### Decision 13: Subpath entries and measured bundles
+
+Every module is a subpath (`two-track/result`, `two-track/decode`, …) because esbuild retains a whole namespace once any member is touched. `pnpm check:bundle` bundles representative consumers with Rolldown and esbuild, executes them, and fails on byte budgets; `bench:hot` measures decoder and async CPU overhead with checksums.
+
 ### Decision 14: A faster decoder protocol, and `compile` as an opt-in
 
 The interpreter allocates one `Result` per decode instead of per field, passes keys down instead of pushing them onto the path, fuses primitive refinements, and checks primitive fields inline from one descriptor per field. That is 1.2–1.5x and leaves it ~1.7x above the generic-loop floor. `D.compile` generates literal-key code for the structural subset and calls the interpreter for everything else, so it is equivalent by construction and property-tested as such; it is opt-in because it uses `new Function`, and it falls back to the interpreter where that is forbidden.
-
-### Decision 11: Testing helpers inject fast-check
-
-`two-track/testing` takes the fast-check module as a parameter typed by a minimal structural interface. The package gains law and round-trip helpers without gaining a dependency, which is the same capability-injection idiom the rest of the library uses.
 
 Also amended: `Async.retry` now requires `retriable`. Defaulting to "retry everything" was a foot-gun.
 
@@ -201,11 +209,11 @@ tools/
 | Core algebra | `result`, `brand`, `tagged`, `match`, `fn`, `capabilities` | nothing |
 | Core algebra, derived | `option` | `result` |
 | Boundary | `decode-internal`, `decode-core`, `decode-dates`, `decode-compile`, `decode` | `result`, `option`, `brand` (and each other, lowest first) |
-| Shell | `async`, `lanes` | `result`, `capabilities` (+ `tagged`, `async` for lanes) |
+| Shell | `async`, `lanes` | `async` → `result`, `capabilities`, `tagged`; `lanes` → those plus `async` |
 | Test support | `testing` | `result`, `option`, `decode` |
 | Surface | `index` | anything |
 
-Nothing in `src/` imports from `node:`; the library is pure web-standard JavaScript (`Promise`, `AbortController`, `crypto.randomUUID`, `setTimeout`) and runs unchanged in browsers and edge runtimes.
+Nothing in `src/` imports from `node:`; the library is pure web-standard JavaScript (`Promise`, `AbortController`, `crypto.randomUUID`, `setTimeout`, and `new Function` only inside the opt-in `D.compile`, which probes for it once and falls back where it is forbidden) and runs unchanged in browsers and edge runtimes.
 
 **Where your application code goes** is the subject of the companion skill, but the shape the library assumes is: `domain/` (types, decoders, pure functions, error definitions — synchronous, imports only `two-track`), `workflows/` (async functions over domain types and a capability record), `infra/` (implementations of the capability interfaces), and one `main` that builds the record and runs.
 
@@ -323,7 +331,8 @@ import { Async, Cap } from "two-track";
 const fetchJson = (url: string, signal: AbortSignal) =>
   Async.tryPromise((s) => fetch(url, { signal: s }).then((r) => r.json()), (cause) => ({ _tag: "Network" as const, cause }), signal);
 
-// Bounded, fail-fast fan-out: first error aborts in-flight work and stops launching more
+// Bounded, fail-fast fan-out: first error aborts in-flight work and stops launching more.
+// Pass a `signal` and the union gains Aborted: a cancelled fan-out is a failure, never a sparse success.
 const priced = await Async.mapConcurrent(lines, (line, _i, signal) => priceLine(line, signal), { concurrency: 8 });
 
 // Accumulating fan-out for batch jobs
@@ -414,12 +423,12 @@ monadLaws(fc, { arb: arbResult(fc, fc.string(), fc.integer()), of: R.ok, andThen
 Correctness here is checked, not enforced (see below), so the check has to be a tool rather than a document. `two-track-check` is a separate dev-time package in [`tools/check`](tools/check/) with its own dependencies (it needs TypeScript 6's compiler API; the library and your app stay on TypeScript 7). Every finding ends with the fix:
 
 ```
-src/workflows/checkout.ts:41:3: [ignored-result] Result ignored — the error silently vanishes — fix: `if (!r.ok) return r;` or an explicit `void` with a reason comment
-src/domain/pricing.ts:12:18: [no-platform-calls] Date.now() in domain — fix: take a Clock capability (deps.clock.now())
-src/domain/order.ts:3:1: [layer-domain-imports] domain imports "pg" — fix: domain may import only two-track; drivers belong in infra/
+src/workflows/checkout.ts:41:3: [ignored-result] Result ignored — the error silently vanishes — fix: handle it: `const r = ...; if (!r.ok) return r;` or discard explicitly with `void` and a reason comment
+src/domain/pricing.ts:12:34: [no-platform-calls] `Date.now()` outside infra/ — fix: take a Cap.Clock capability (deps.clock.now()) so the domain stays pure and testable
+src/domain/order.ts:1:1: [layer-domain-imports] domain imports "pg" — fix: domain/ may import only [two-track]; drivers and frameworks belong in infra/, injected through ports
 ```
 
-The type-aware must-use family — `ignored-result`, `floating-async-result`, `ignored-result-in-callback`, `floating-async-callback` — is the point of the package: it is TypeScript's missing `#[must_use]`, and it covers the cases a grep never could, such as a Result returned from a `forEach` callback or an array of Results produced by `map` and never read. Banned constructs, layer direction, brand forging, bare `Promise.all`, `fetch` without a signal, and `default:` without `assertNever` round it out, and `R.unwrapOr` / `D.unknown` are reported at `review` severity for a human to confirm. Suppressions require a reason and are counted. See the package README for usage, config and the full rule table.
+The type-aware must-use family — `ignored-result`, `floating-async-result`, `ignored-result-in-callback`, `floating-async-callback` — is the point of the package: it is TypeScript's missing `#[must_use]`, and it covers the cases a grep never could, such as a Result returned from a `forEach` callback or an array of Results produced by `map` and never read. Banned constructs, platform calls and `process.env` outside their layers, layer direction, brand forging, bare `Promise.all`, `fetch` without a signal, and `default:` without `assertNever` round it out, and `R.unwrapOr` / `D.unknown` are reported at `review` severity for a human to confirm. Suppressions require a reason (`allow-needs-reason`) and are counted. See the package README for usage, config and the full rule table.
 
 ## Public surface
 
@@ -440,7 +449,7 @@ Every module is also a subpath (`two-track/result`, `two-track/decode`, …) for
 
 ## Conventions
 
-These are the rules the companion skill enforces on application code. The library itself follows all of them, and [`scripts/invariants.ts`](scripts/invariants.ts) checks the mechanical ones on every build.
+These are the rules the companion skill enforces on application code. The library itself follows all of them: [`scripts/invariants.ts`](scripts/invariants.ts) checks the ones that apply to `src/` (banned constructs, layer direction, file size, platform calls, double casts) on every build, and `two-track-check` is the tool that checks them in an application, including the type-aware ones.
 
 **Errors**
 - An error is `{ readonly _tag: "WhatHappened"; ...fields }` built with `tagged`. The tag says what happened (`OrderNotFound`), not who threw (`DbError`). Fields carry what a handler needs: ids, the offending value, `retriable`. Never a bare message string.
@@ -488,8 +497,8 @@ Stated plainly, because a library that hides its limits is a library that gets m
 | Do-notation (`yield*`) | 40–80x measured cost | Early returns in the domain, `await` + `Async.andThen` in the shell |
 | Fibers, interruption, structured concurrency | No runtime | `AbortSignal` threaded through every async combinator; `mapConcurrent` aborts in-flight work on first failure; `Lane.*` for switch/exhaust/queue semantics |
 | Schemas that double as test generators | No schema runtime | fast-check arbitraries written beside each decoder, with a round-trip property tying them together |
-| Nominal types | TypeScript is structural | Brands applied only inside decoders; the invariants linter rejects `as Brand<` elsewhere |
-| Enforced purity | The compiler cannot see effects | Capabilities by convention, plus lint on `Date.now`/`Math.random`/timers/`console` in domain code |
+| Nominal types | TypeScript is structural | Brands applied only inside decoders; `two-track-check`'s `no-brand-cast` rejects `as Brand<` and casts to branded types outside the configured `brandFiles` |
+| Enforced purity | The compiler cannot see effects | Capabilities by convention, plus `two-track-check`'s `no-platform-calls`, `no-process-env` and `no-console` outside `infra/` |
 | Higher-kinded abstraction (one `map` over Result, Option, Array) | TypeScript has no HKTs; neither does Rust | Concrete `R.map`, `O.map`, `Array.prototype.map` |
 | Runtime immutability | 10–20x measured cost of `Object.freeze` | `readonly` types; freeze fixtures in tests only |
 | Automatic retries, caching, metrics, tracing | Not a runtime concern this library owns | Thin helpers (`Async.retry`, `withTimeout`); observability belongs to your shell |
@@ -523,7 +532,7 @@ This repository is built to be worked on by coding agents with humans steering, 
 
 ```bash
 pnpm install          # dev dependencies only; the library has none
-pnpm check            # typecheck + invariants + coverage + benchmark + build + consumer + checker checks
+pnpm check            # typecheck + invariants + coverage + bench:check + check:lanes + build + check:bundle + check:package + check:tools
 pnpm test             # vitest: unit, property (fast-check), structural (invariants), example
 pnpm test:coverage    # library + invariant coverage; enforces per-file minimums
 pnpm typecheck        # tsc 7, every strict flag
@@ -537,6 +546,9 @@ pnpm example          # examples/checkout.ts — the worked workflow end to end
 pnpm build            # emits dist/ with declarations and source maps
 pnpm check:tools      # two-track-check: typecheck, tests with coverage, build and self-check (also in check)
 pnpm check:package    # pack + install + import/require + tsc (TS 6 and 7, skipLibCheck false) as a consumer would
+pnpm check:lanes      # lane throughput ratio gates against a same-run baseline
+pnpm bench:lanes      # the lane table without gates
+pnpm bench:cross      # decoders vs Zod/Valibot/ArkType, railway vs Ramda/Effect (report only; workspace bench/cross)
 ```
 
 Scripts, benchmarks, and examples are plain `.ts` files run directly by Node 22.18+ through native type stripping; the code uses only erasable syntax (`erasableSyntaxOnly` is on) so no transpiler is needed anywhere in the toolchain.
@@ -569,6 +581,7 @@ All library modules have subpaths (`result`, `option`, `brand`, `tagged`, `match
 | Module format | ESM with `default` conditions, so `require("two-track")` works on Node ≥ 22.12 via `require(esm)`; `two-track/package.json` is exported | — |
 
 `pnpm check:package` proves this on every change: it packs the tarball, installs it in a scratch project, imports and requires it, and compiles a consumer with `skipLibCheck: false` under TypeScript 6 and TypeScript 7.
+
 - **Tree-shaking:** `sideEffects: false`; namespaces are plain module objects.
 - **Versioning:** semver once published. The encoding of `Result` and `Option` (field names `ok`/`value`/`error` and `some`/`value`) is part of the public contract and will not change in a minor version, because user code narrows on it directly.
 

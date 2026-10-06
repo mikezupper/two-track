@@ -41,13 +41,16 @@ type CheckoutError =
   | ReturnType<typeof InvalidCommand>
   | ReturnType<typeof UnknownSku>
   | ReturnType<typeof InsufficientStock>
-  | ReturnType<typeof PaymentDeclined>;
+  | ReturnType<typeof PaymentDeclined>
+  | Async.Aborted; // the request can be cancelled while the payment retry is waiting
 
 // ---------- capabilities: what the workflow is allowed to do ----------
 type Catalog = { readonly price: (sku: Sku) => AsyncResult<never, Option<Cents>> };
 type Inventory = { readonly reserve: (sku: Sku, qty: Quantity) => AsyncResult<ReturnType<typeof InsufficientStock>, void> };
-type Payments = { readonly charge: (userId: UserId, amount: Cents) => AsyncResult<ReturnType<typeof PaymentDeclined>, void> };
+type Payments = { readonly charge: (userId: UserId, amount: Cents, signal: AbortSignal) => AsyncResult<ReturnType<typeof PaymentDeclined>, void> };
 type Deps = { readonly catalog: Catalog; readonly inventory: Inventory; readonly payments: Payments; readonly clock: Cap.Clock; readonly ids: Cap.IdGen };
+/** Per-request context: explicit, never ambient. The signal is the client's disconnect or the deadline. */
+type Ctx = { readonly requestId: string; readonly signal: AbortSignal };
 
 // ---------- pure core ----------
 const applyCoupon = (total: Cents, coupon: Option<string>): Cents =>
@@ -57,7 +60,7 @@ const sumTotal = (lines: ReadonlyArray<{ readonly qty: Quantity; readonly unitPr
   cents(lines.reduce((acc, l) => acc + l.qty * l.unitPrice, 0));
 
 // ---------- workflow: the railway ----------
-export const checkout = async (deps: Deps, raw: unknown): AsyncResult<CheckoutError, Order> => {
+export const checkout = async (deps: Deps, ctx: Ctx, raw: unknown): AsyncResult<CheckoutError, Order> => {
   const decoded = R.mapErr(CheckoutCommand.decode(raw), (e) => InvalidCommand({ issues: D.formatIssues(e) }));
   if (!decoded.ok) return decoded;
   const cmd: CheckoutCommand = decoded.value;
@@ -76,11 +79,13 @@ export const checkout = async (deps: Deps, raw: unknown): AsyncResult<CheckoutEr
   if (!reserved.ok) return reserved;
 
   const total = applyCoupon(sumTotal(priced.value), cmd.coupon);
-  const charged = await Async.retry((_, signal) => deps.payments.charge(cmd.userId, total), {
+  // Retry only transient declines; the request signal reaches the gateway AND stops the backoff wait.
+  const charged = await Async.retry((_, signal) => deps.payments.charge(cmd.userId, total, signal), {
     attempts: 3,
     delay: Async.backoff({ baseMs: 50 }),
     retriable: (e) => e.retriable,
     sleeper: Cap.instantSleeper(),
+    signal: ctx.signal,
   });
   if (!charged.ok) return charged;
 
@@ -102,7 +107,8 @@ export const fakeDeps = (stock: Record<string, number>, declineFirst = 0): Deps 
       },
     },
     payments: {
-      charge: async (_user, amount) => {
+      charge: async (_user, amount, signal) => {
+        if (signal.aborted) return err(PaymentDeclined({ reason: "request cancelled", retriable: false }));
         if (declines-- > 0) return err(PaymentDeclined({ reason: "gateway timeout", retriable: true }));
         charges.push(amount);
         return ok(undefined);
@@ -125,13 +131,17 @@ export const toResponse = (r: Result<CheckoutError, Order>): Response =>
         UnknownSku: ({ sku }) => ({ status: 422, body: { error: "unknown sku", sku } }),
         InsufficientStock: (s) => ({ status: 409, body: { error: "insufficient stock", ...s } }),
         PaymentDeclined: ({ reason }) => ({ status: 402, body: { error: "payment declined", reason } }),
+        Aborted: () => ({ status: 499, body: { error: "client cancelled" } }),
       }),
   );
 
+/** A context for scripts and tests: a fresh, never-aborted signal. */
+export const liveCtx = (requestId = "req-1"): Ctx => ({ requestId, signal: new AbortController().signal });
+
 if (import.meta.main) {
   const deps = fakeDeps({ "ABC-123": 5 }, 1);
-  const good = await checkout(deps, { userId: "u1", lines: [{ sku: "ABC-123", qty: 2 }], coupon: "SAVE10" });
-  const bad = await checkout(deps, { userId: "", lines: [{ sku: "nope", qty: 0 }] });
-  const short = await checkout(deps, { userId: "u1", lines: [{ sku: "ABC-123", qty: 99 }], coupon: null });
+  const good = await checkout(deps, liveCtx(), { userId: "u1", lines: [{ sku: "ABC-123", qty: 2 }], coupon: "SAVE10" });
+  const bad = await checkout(deps, liveCtx(), { userId: "", lines: [{ sku: "nope", qty: 0 }] });
+  const short = await checkout(deps, liveCtx(), { userId: "u1", lines: [{ sku: "ABC-123", qty: 99 }], coupon: null });
   for (const r of [good, bad, short]) console.log(JSON.stringify(toResponse(r)));
 }

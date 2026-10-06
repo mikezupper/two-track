@@ -7,7 +7,7 @@
  * struct or array (boundaries report all problems), while workflows built on
  * Result fail fast.
  *
- * Speed (decision 0006, amended after measuring against Zod/Valibot/ArkType):
+ * Speed (decision 0014, after measuring against Zod/Valibot/ArkType; 0006 covers accumulation):
  * the internal protocol is not the public one. `run` returns the decoded value
  * itself, or a private `Failure` marker, so a `Result` is allocated once per
  * `decode` call rather than once per field. The path is a mutable stack that

@@ -23,8 +23,12 @@ The sibling skills target TypeScript 7 (the native compiler). `typescript-eslint
 - **Pin TypeScript 6** — rejected: it would diverge from the sibling skills and lose `erasableSyntaxOnly`-era defaults the examples rely on.
 - **Biome** — not evaluated yet; a candidate when revisiting.
 
+## Amendment (2026-10-06, alignment sweep)
+
+The two type-aware rules named above as the reason to revisit ESLint — exhaustiveness and floating promises — are now implemented in `two-track-check` (`switch-default-without-assert-never`, `floating-async-result`, plus `ignored-result`, which ESLint never had). typescript-eslint, when it supports TypeScript ≥ 7.1, would add only generic hygiene rules; nothing in the hard rules waits on it.
+
 ## Consequences
 
 - Exhaustiveness is guaranteed by the `match` API's types and `assertNever`, not by a lint rule.
-- Floating promises are a reviewer check (every `AsyncResult` is awaited or returned).
+- Floating promises were a reviewer check when this was decided; `two-track-check`'s `floating-async-result` now reports them.
 - `scripts/invariants.ts` must be updated when a module is added (the `layer-registered` rule says so).

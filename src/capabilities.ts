@@ -1,8 +1,8 @@
 /**
  * Capabilities — the effects a workflow is allowed to perform, as values.
  *
- * Domain code never calls `Date.now()`, `Math.random()`, `crypto.randomUUID()`
- * or `setTimeout` directly. It receives a capability record and calls that.
+ * Domain code never calls `Date.now()`, `performance.now()`, `Math.random()`,
+ * `crypto.randomUUID()`, `crypto.getRandomValues()` or `setTimeout` directly. It receives a capability record and calls that.
  * Production wires the `system*` implementations in one composition root;
  * tests wire the deterministic ones. This is the zero-runtime stand-in for
  * Effect's requirements channel and Rust's trait objects.

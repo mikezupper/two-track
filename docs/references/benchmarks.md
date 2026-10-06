@@ -120,7 +120,7 @@ Recorded 2026-10-05. [The benchmark](../../bench/hot-paths.ts) uses preconstruct
 
 | Workload | Before | After | Interpretation |
 |---|---|---|---|
-| struct, 200,000 items | 21.82 ms | 22.22 ms | within noise |
+| struct, 200,000 items | 21.82 ms | 22.22 ms | within noise (2026-10-05); after decision 0014 (2026-10-06, best of several noisy runs): 16.1 ms interpreted, **3.2 ms with `D.compile`** on Node; 6.2 / 2.4 ms on Bun |
 | array of structs, 200,000 items | 19.00 ms | 19.45 ms | within noise |
 | `oneOf`, first alternative succeeds, 200,000 items | 27.02 ms | 22.15 ms | about 18% faster; no eager fallback allocation |
 | array, 200,000 invalid integers | 9.15 ms | 6.99 ms | about 24% faster; indexed issue accumulation |
@@ -132,21 +132,21 @@ These are local CPU and allocation measurements, not network latency improvement
 
 ## Consumer bundles
 
-Recorded 2026-10-05 with pinned Rolldown 1.2.12 and esbuild 0.28.0. Run `pnpm build && pnpm bench:bundle`. [The script](../../bench/bundles.mjs) bundles small consumer programs as minified ESM, uses the package's normal side-effect metadata, measures raw/gzip/Brotli output, and executes each emitted program to verify behavior. `pnpm check:bundle` enforces budgets for direct imports and full-surface/testing consumers under both bundlers.
+Recorded 2026-10-06 (after decision 0014) with pinned Rolldown 1.2.12 and esbuild 0.28.0. Run `pnpm build && pnpm bench:bundle`. [The script](../../bench/bundles.mjs) bundles small consumer programs as minified ESM, uses the package's normal side-effect metadata, measures raw/gzip/Brotli output, and executes each emitted program to verify behavior. `pnpm check:bundle` enforces budgets for direct imports and full-surface/testing consumers under both bundlers.
 
 esbuild retains namespace members through the root entry. Additive module subpaths let consumers select individual exports:
 
-| Consumer | esbuild root namespace | esbuild direct subpath | Direct gzip |
-|---|---|---|---|
-| Result `ok` + `err` + `andThen` | 1,551 B | 117 B | 116 B |
-| struct decoder | 4,279 B | 1,124 B | 631 B |
-| primitive decoder | 4,234 B | 304 B | 223 B |
-| async interop | 3,102 B | 170 B | 150 B |
-| concurrent map | 3,096 B | 642 B | 399 B |
-| switch lane | 2,744 B | 731 B | 385 B |
+| Consumer | esbuild root namespace | esbuild direct subpath | Direct gzip | Rolldown direct |
+|---|---|---|---|---|
+| Result `ok` + `err` + `andThen` | 1,551 B | 117 B | 116 B | 114 B |
+| struct decoder | 10,590 B | 2,300 B | 1,108 B | 2,286 B |
+| primitive decoder | 10,545 B | 1,038 B | 542 B | 1,026 B |
+| async interop | 3,280 B | 170 B | 150 B | 176 B |
+| concurrent map | 3,274 B | 733 B | 444 B | 744 B |
+| switch lane | 2,929 B | 731 B | 385 B | 769 B |
 
-These selective consumer bundles are 74–95% smaller through direct imports. For example, use `import { ok, err, andThen } from "two-track/result"` or `import { struct, nonEmptyString, integer } from "two-track/decode"`. The existing root API remains available.
+Selective consumers are 75–93% smaller through direct imports: `import { ok, err, andThen } from "two-track/result"`, `import { struct, nonEmptyString, integer } from "two-track/decode"`. The root API remains available. The root-namespace rows grew with the decoder rewrite and `compile` because a namespace import retains the whole module; the direct rows are what a selective consumer pays.
 
-Rolldown already prunes the root namespaces effectively. Its direct consumers measure 114 B for Result, 1,119 B for the struct decoder, 301 B for a primitive decoder, 176 B for interop, 653 B for concurrent map and 769 B for switch lane. Pure annotations on inert decoder constructors reduce the struct consumer from 1,324 B before optimization to 1,119 B.
+Before (2026-10-05, pre-0014, for the record): esbuild direct struct decoder 1,124 B, primitive 304 B, interop 170 B, concurrent 642 B, switch 731 B; Rolldown direct struct 1,119 B, primitive 301 B. The decoder protocol rewrite (value-or-Failure, inline primitive checks with their messages, struct field descriptors) cost about 1 kB on decoder consumers and bought 1.2–1.5x interpreter speed; `compile` is not retained unless imported (verified with esbuild: no `new Function` in a struct-only consumer).
 
-Consumers retaining every runtime export measured 13,764 B / 4,756 B gzip with Rolldown and 13,510 B / 4,843 B gzip with esbuild at the review; after `isoDate` became strict ISO-8601 with calendar validation and `oneOf` began reporting every alternative's issues (same day) they measure 15,362 B / 5,413 B gzip (Rolldown) and 15,109 B / 5,516 B gzip (esbuild). Selective consumers did not change. The `full` budget is 16,000 B as a regression tripwire. `two-track/testing` remains separate at about 1.5 kB minified. Both bundlers are development dependencies; the library has zero runtime dependencies.
+Consumers retaining every runtime export: 20,696 B / 7,225 B gzip (Rolldown) and 20,472 B / 7,341 B gzip (esbuild) as of 2026-10-06, up from 13,764 / 13,510 B at the 2026-10-05 review (strict `isoDate`, `oneOf` reporting every alternative, the decoder protocol, and `compile` itself account for the difference). The `full` budget is 22,500 B and `decoderDirect` 2,500 B, `primitiveDirect` 1,150 B — regression tripwires set ~10% above these measurements. `two-track/testing` remains separate at about 1.5 kB minified. Both bundlers are development dependencies; the library has zero runtime dependencies.

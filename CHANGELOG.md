@@ -5,7 +5,7 @@ All notable changes to `two-track` are recorded here. The format follows Keep a 
 ## [Unreleased]
 
 ### Added
-- `D.compile(decoder)` (decision 0014): opt-in code-generated decoder for the structural subset, identical semantics by construction (property-tested), ~2.3–2.8x the interpreter on object-heavy schemas and 4x on flat structs; returns the decoder unchanged where `new Function` is forbidden (CSP, Cloudflare Workers).
+- `D.compile(decoder)` (decision 0014): opt-in code-generated decoder for the structural subset, identical semantics by construction (property-tested), 2.6–2.8x the interpreter on the regex-heavy bench schema, 4.0x on a flat struct and up to 4.8x without regexes (interleaved A/B, benchmarks.md); returns the decoder unchanged where `new Function` is forbidden (CSP, Cloudflare Workers).
 - Direct module subpaths (`two-track/result`, `option`, `decode`, `async`, `capabilities`, `lanes`, `tagged`, `match`, `fn`, `brand`) for smaller consumer bundles while preserving root namespaces.
 - Decoder/async throughput benchmarks and Rolldown/esbuild consumer bundle checks with byte budgets and runtime smoke checks.
 - `Result`, `Option`, `Brand`, `Tagged`/`tagged`, `match`/`matchBy`/`assertNever`, `pipe`.
@@ -23,8 +23,8 @@ All notable changes to `two-track` are recorded here. The format follows Keep a 
 - `D.isoDate` is now strict ISO-8601: `YYYY-MM-DD`, or a date-time with `Z`/`±HH:mm`; calendar-invalid dates (`2023-02-30`), times out of range, and offset-less date-times are rejected. The previous engine-grammar behaviour is available, explicitly named, as `D.dateFromString`.
 - `D.oneOf` reports every alternative's issues on failure, each prefixed `alternative N:`, instead of only the last alternative's.
 - `two-track-check` `no-platform-calls` also reports `performance.now()` and `crypto.getRandomValues()`; new `no-process-env` reports environment reads outside the `root` layer (the skill's boundaries reference had claimed this was enforced; now it is).
-- `pnpm check` now enforces coverage per file, bundle budgets, and the separate checker package's full check. Both packages require 95% statements/lines/functions and 90% branches per executable file.
-- `Async.mapConcurrent` adds `Aborted` to cancellable calls' error unions; typed options and retry policies with optional signals are accepted.
+- `pnpm check` now enforces coverage per file, lane throughput ratio gates (`check:lanes`), bundle budgets (`check:bundle`), the packed-consumer check (`check:package`), and the separate checker package's full check. Both packages require 95% statements/lines/functions and 90% branches per executable file.
+- `Async.mapConcurrent`, `Async.validateConcurrent` and `Async.retry` add `Aborted` to their error unions only when a `signal` is supplied; a third overload accepts options/policies typed with an optional signal and returns `E | Aborted` conservatively.
 - `oneOf` skips its eager failure allocation, concurrent validation writes directly into its final success array and creates failure storage only on demand, and lane signal linking avoids temporary arrays.
 - `Async.retry`: `retriable` is now required (amendment to decision 0005). Write `retriable: () => true` to retry every error explicitly.
 - `Async.retry`: with a `signal`, an abort before an attempt or during a backoff wait returns `err(Aborted)` and starts no further attempt; the error type widens to `E | Aborted` only when a signal is supplied.
@@ -44,6 +44,8 @@ All notable changes to `two-track` are recorded here. The format follows Keep a 
 - `tagged` keeps its declared discriminant in both the returned object and its type when fields carry a conflicting tag.
 - The checker rejects invalid tsconfig diagnostics, layer arrays and malformed CLI arguments; recognizes Results anywhere in a tuple; and reads suppression directives only from actual comments.
 - `Async.retry` ran one extra attempt, with an already-aborted signal, when the abort happened during the backoff wait (reported downstream; see docs/exec-plans/completed/0002-downstream-findings.md).
+
+- `prepare` scripts in both packages build `dist/` when installed from git (`pnpm add github:mikezupper/two-track`); pnpm 10 consumers allowlist them in `pnpm.onlyBuiltDependencies`. `two-track-check` declares `engines.node >=20` like the library (its bin runs built JavaScript).
 
 ### Testing
 - `pnpm bench:lanes` / `pnpm check:lanes`: per-trigger overhead of every lane under immediate and waiting workloads with heap-retention figures; `--check` enforces ratio gates against a same-run baseline and is part of `pnpm check` and CI.

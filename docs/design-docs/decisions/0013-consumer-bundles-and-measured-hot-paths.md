@@ -15,5 +15,9 @@ Methods and before/after numbers are in [benchmarks](../../references/benchmarks
 ## Alternatives
 Forcing bundler side effects off or changing namespace semantics would mask rather than fix compatibility differences. Pre-minifying published modules would reduce readability without resolving opaque namespace imports. Shared AbortSignals or skipping awaits could reduce orchestration overhead but change identity or scheduling semantics; neither was adopted.
 
+## Amendment (2026-10-06)
+
+After decision 0014 the esbuild direct struct consumer measures 2,300 B (Rolldown 2,286 B) and the primitive consumer 1,038 B: the faster decoder protocol carries its inline primitive checks and messages into every decoder consumer. Budgets were raised with the reason recorded in `bench/bundles.mjs`; `compile` is tree-shaken unless imported. Current figures and the dated before/after are in `docs/references/benchmarks.md`.
+
 ## Consequences
 Subpaths are additive and preserve the original API. [Consumer checks](../../../scripts/check-package.mjs) import and require every entry and compile under TS 6 and 7. [Bundle checks](../../../bench/bundles.mjs) run in the complete check and CI. [Hot-path benchmarks](../../../bench/hot-paths.ts) are report-only because small timing differences depend on the machine. These tools are development dependencies; the library still has zero runtime dependencies.

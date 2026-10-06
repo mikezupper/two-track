@@ -4,7 +4,7 @@ Status: accepted        Date: 2026-10-06
 
 ## Context
 
-Measured against the field (`bench/cross/decoders-vs.mjs`, decision 0013's amendment to the README), two-track's decoders were 15–30% faster than Zod and Valibot but 3.7x slower than ArkType on valid input (855 vs 230 ns per object on the bench schema). The README had claimed parity with compiled validators without a measurement. A profile put ~460 of the 855 ns in the per-field path `push`/`pop`, the per-field `Result` allocation, the closure layers of stacked refinements, and the megamorphic call per field.
+Measured against the field (`bench/cross/decoders-vs.mjs`, added with the third-party comparison workspace and recorded in the README's measurements), two-track's decoders were 15–30% faster than Zod and Valibot but 3.7x slower than ArkType on valid input (855 vs 230 ns per object on the bench schema). The README had claimed parity with compiled validators without a measurement. A profile put ~460 of the 855 ns in the per-field path `push`/`pop`, the per-field `Result` allocation, the closure layers of stacked refinements, and the megamorphic call per field.
 
 A second measurement set the floor: a hand-written generic loop over a key array cannot decode a four-field object in under ~94 ns on V8, because `obj[key]` with a non-literal key is a generic property load. Literal-key code — `o.id`, `out.id = …` — does the same in ~13 ns. That is the whole of ArkType's advantage, and only code generation produces literal keys.
 

@@ -14,11 +14,11 @@ A railway library needs a handful of helpers beyond `Result`: validation, bounde
 
 - Harness engineering observation: in-repo reimplementations of small helpers are fully legible to agents, can be tested to 100%, and behave exactly as the runtime expects; opaque upstream behaviour costs more than it saves.
 - Portability: without `node:` imports and with only web-standard globals, the same build runs in browsers, workers, Bun, Deno, and edge runtimes. Verified on Node 24 and Bun 1.3.
-- The helpers total under 400 lines including docs, so the maintenance cost is bounded.
+- The helpers were under 400 lines including docs when this was decided; with lanes, the decoder compiler and the testing entry the library is ~2,100 lines (ARCHITECTURE.md's table is checked against `wc -l`). The maintenance cost is bounded by the invariants and the test suites rather than by size.
 
 ## Alternatives
 
-- **Peer-depend on a validation library** (Zod/Valibot/ArkType) — rejected: it would be the only dependency, its error shape would leak into ours, and hand-written `typeof` decoders are as fast as anything compiled. A thin adapter can live in user code if a project already uses one.
+- **Peer-depend on a validation library** (Zod/Valibot/ArkType) — rejected: it would be the only dependency, its error shape would leak into ours, and hand-written `typeof` decoders were believed to be as fast as anything compiled — a belief decision 0014 measured and found false (3.7x behind ArkType, 1.4x after `D.compile`); the dependency argument stands on its own. A thin adapter can live in user code if a project already uses one.
 - **A `Reader`-style requirements type** to mimic Effect's `R` — rejected: without a runtime it is a closure per call and the types do not compose across `await`.
 
 ## Consequences

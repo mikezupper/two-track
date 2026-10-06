@@ -11,8 +11,8 @@
 ## Non-negotiables (enforced by `scripts/invariants.ts`, with the fix in every message)
 
 - Zero runtime dependencies in the library (root `package.json`). Implement helpers in `src/`; dev dependencies are fine. `tools/check` is a separate package and may depend on TypeScript 6.
-- In `src/`: no `throw` (except `assertNever`), no `try` (except the three interop edges), no `.catch(`, no `any`, no generators, no `Object.freeze`, no classes, no `console`, no `node:` imports, no platform time/random/timers outside `capabilities.ts`.
-- Layer direction per the `LAYERS` table in `scripts/invariants.ts` and `ARCHITECTURE.md`. New module → register it in both.
+- In `src/`: no `throw` (except `assertNever`), no `try` (except the four interop edges: `fromThrowable`, `tryPromise`, `D.json`, and the one-time `new Function` probe in `decode-compile`), no `.catch(`, no `any`, no generators, no `Object.freeze`, no classes, no `console`, no `node:` imports, no platform time/random/timers outside `capabilities.ts` (the one documented exception: `withTimeout`'s `setTimeout` in `async.ts`).
+- Layer direction per the `LAYERS` table in `scripts/invariants.ts` and `ARCHITECTURE.md`. New module → register it in both; the module table's line counts are checked against `wc -l` (`architecture-line-counts`).
 - Every export of `src/async.ts`, `src/lanes.ts`, `src/capabilities.ts` appears in `test/<module>.properties.test.ts` (fast-check over generated schedules with `Cap.manualSleeper`/`controlledClock`).
 - Every `docs/` link resolves; every decision file is listed in `docs/design-docs/index.md`; every active plan has `## Progress` and `## Decision log`.
 - Encoding contract: `Result` is `{ ok: true, value } | { ok: false, error }`, `Option` is `{ some: true, value } | { some: false }`. User code narrows on these; do not rename.
@@ -20,14 +20,21 @@
 ## Commands
 
 ```bash
-pnpm check        # definition of done: typecheck + lint + coverage + bench + build + consumer + tools
-pnpm check:tools  # the two-track-check package (tools/check): its typecheck + tests + build + self-check
-pnpm check:package # pack + install + import/require + tsc under TS 6 and 7 as a consumer (part of pnpm check)
-pnpm test         # vitest (unit, fast-check properties, structural invariants, example)
+pnpm check         # definition of done: typecheck + lint + coverage + bench:check + check:lanes + build + check:bundle + check:package + check:tools
+pnpm check:tools   # the two-track-check package (tools/check): its typecheck + coverage + build + self-check
+pnpm check:package # pack + install + import/require + tsc under TS 6 and 7 as a consumer
+pnpm check:lanes   # lane throughput ratio gates vs a same-run baseline (bench/lanes.ts --check)
+pnpm check:bundle  # consumer bundle byte budgets + runtime smoke, Rolldown and esbuild (after build)
+pnpm test          # vitest (unit, fast-check properties, structural invariants, example)
 pnpm test:coverage # library + invariant coverage, with per-file thresholds
-pnpm lint         # node scripts/lint-invariants.ts
-pnpm bench        # node bench/encodings.ts   (--check enforces the 4x ratio)
-pnpm example      # node examples/checkout.ts
+pnpm lint          # node scripts/lint-invariants.ts
+pnpm build         # tsc -p tsconfig.build.json, then rewrite .ts specifiers in the emitted .d.ts
+pnpm bench         # bench/encodings.ts   (--check enforces the 4x ratio)
+pnpm bench:hot     # bench/hot-paths.ts   decoder / async CPU overhead, interpreted and compiled
+pnpm bench:lanes   # bench/lanes.ts       per-trigger overhead of every lane
+pnpm bench:bundle  # bench/bundles.mjs    minified/gzip/brotli consumer sizes
+pnpm bench:cross   # bench/cross/         decoders vs Zod/Valibot/ArkType, railway vs Ramda/Effect (report only)
+pnpm example       # node examples/checkout.ts
 ```
 
 Node ≥ 22.18 runs `.ts` directly (type stripping); keep all syntax erasable.
@@ -39,13 +46,13 @@ Node ≥ 22.18 runs `.ts` directly (type stripping); keep all syntax erasable.
 | Anything | `ARCHITECTURE.md` (module map, layers, permitted edges) |
 | Why something is shaped the way it is | `docs/design-docs/index.md` → the decision record; `docs/design-docs/core-beliefs.md` |
 | `src/result.ts`, `src/option.ts` | Decision 0001 (encoding), 0002 (no generators), 0003 (no freeze); laws in `test/result.test.ts` |
-| `src/decode.ts` | Decision 0006 (decoders accumulate; path stack); `test/decode.test.ts` round-trip properties |
+| `src/decode*.ts` | Decision 0006 (accumulate every issue), 0014 (value-or-Failure protocol, inline primitives, `compile`); `test/decode.test.ts` round-trips, `test/decode-compile.test.ts` equivalence properties |
 | `src/async.ts`, `src/capabilities.ts` | Decision 0005 (AsyncResult never rejects; AbortSignal everywhere; `retriable` required), 0004 (capabilities) |
-| `src/lanes.ts` | Decision 0009 (trigger coordination vs fan-out); `test/lanes.test.ts` uses `Cap.manualSleeper` |
+| `src/lanes.ts` | Decision 0009 (trigger coordination vs fan-out); `test/lanes.test.ts` and the enforced `test/lanes.properties.test.ts` use `Cap.manualSleeper` |
 | `src/testing.ts` (`two-track/testing`) | Decision 0011 (fast-check injected, never depended on) |
 | `tools/check/` (`two-track-check`) | Decision 0010; it has its OWN deps (TypeScript 6 API) and its own `pnpm check`; the root `check:tools` runs it |
 | Performance | `docs/references/benchmarks.md`, `bench/encodings.ts` |
-| Tooling, lint, CI | Decision 0007; `scripts/invariants.ts`; `.github/workflows/ci.yml` |
+| Tooling, lint, CI | Decisions 0007 (TS 7 + custom invariants), 0012 (coverage in the check), 0013 (bundles, subpaths); `scripts/invariants.ts`; `.github/workflows/ci.yml` |
 | Planning a multi-step change | `docs/exec-plans/README.md`; put the plan in `docs/exec-plans/active/` |
 | Known gaps | `docs/exec-plans/tech-debt-tracker.md`, `docs/QUALITY_SCORE.md` |
 | How application code should use this | the companion skill repo `two-track-fp-skill` (SKILL.md + references) |

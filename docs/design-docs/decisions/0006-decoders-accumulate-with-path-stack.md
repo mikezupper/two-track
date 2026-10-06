@@ -8,12 +8,14 @@ Parse-don't-validate needs a decoder that turns `unknown` into a domain type. Tw
 
 ## Decision
 
+*Superseded in part by the amendments below and by decision 0014: `oneOf` now reports every alternative, and the internal protocol is `run(input, path, key)` returning the value or a `Failure` marker.*
+
 Containers (`struct`, `array`, `record`) run every child and collect every issue; `taggedUnion` reports the issues of the one selected variant; `oneOf` reports the last alternative's issues. The path is a single mutable array created per top-level `decode` call; containers `push`/`pop` keys around child calls and an issue copies the path only when it is recorded. The `run(input, path)` signature is `@internal`.
 
 ## Evidence
 
 - Boundaries should show users every problem at once (Wlaschin's validation-applicative argument); fail-fast belongs inside workflows, where `Result.andThen` already provides it.
-- The success path allocates only the output object, so decoding is straight-line `typeof` checks — the same lower bound that compiled validators reach.
+- The success path allocates only the output object, so decoding is straight-line `typeof` checks. (Decision 0014 later measured that this is NOT the lower bound compiled validators reach: a generic keyed loop floors at ~94 ns per four-field object, literal-key code at ~13 ns.)
 - Property tests: round-trip on generated values, JSON round-trip, input never mutated, never throws on `fc.anything()`.
 
 ## Alternatives
@@ -34,6 +36,6 @@ Two behaviours were correct as documented but contradicted their names, which is
 
 ## Consequences
 
-- `D.optional` is a marker read by `struct` so absent keys become `?:` in the inferred type.
+- `D.optional` is a marker read by `struct` (and by `compile`, through `node`/`inner`) so absent keys become `?:` in the inferred type.
 - `D.brand` is the one sanctioned cast and sits behind the refinement it brands.
 - `formatIssues` renders `path: message` lines for 400 responses and logs.

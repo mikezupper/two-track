@@ -20,6 +20,10 @@ The library proves its own functor/monad laws and decoder round-trips with fast-
 - **Separate npm package depending on fast-check** — viable later; rejected for now to keep one repo and one version.
 - **Schema-derived arbitraries** (Effect-style) — would need a schema runtime; `arbDecoded` (filter a raw arbitrary through the decoder) is the zero-runtime approximation and is documented with its exhaustion caveat.
 
+## Amendment (2026-10-06, alignment sweep)
+
+The exported surface also includes `structuralEq` (the default `Eq`, JSON-based, with documented limits) and the types `FastCheckLike`, `Arb`, `Eq`. The interop claim is one-directional: the real `fc` is accepted without casts, but the arbitraries the helpers *return* are the structural `Arb<T>`, which fast-check's own `fc.record`/`fc.func` do not accept without `as fc.Arbitrary<T>` (tech-debt tracker). `monadLaws` therefore derives its Kleisli arrows when `arbKleisli` is omitted.
+
 ## Consequences
 
 - The skill's `testing.md` uses these helpers for every custom combinator and decoder.

@@ -5,7 +5,8 @@
  * - Eager promises, not a lazy Task type: interoperates with every library,
  *   and `await` is free of the generator cost that do-notation pays.
  * - A promise on the railway NEVER rejects. Rejection is reserved for defects.
- *   `fromPromise`/`tryPromise` are the only places `.catch` appears.
+ *   `fromPromise`/`tryPromise` are the only places a rejection is converted
+ *   into a value (via two-argument `.then`; the library never calls `.catch`).
  * - Every long-running combinator threads an AbortSignal so timeouts and
  *   first-failure cancellation actually stop work.
  */
@@ -16,7 +17,7 @@ import type { Err, NonEmptyArray, Result } from "./result.ts";
 import { err, ok } from "./result.ts";
 import { tagged } from "./tagged.ts";
 
-/** Cancellation outcome when a concurrent map or a retry is stopped by its caller. */
+/** Cancellation outcome when `mapConcurrent`, `validateConcurrent` or `retry` is stopped by its caller's signal. */
 export const Aborted = /* @__PURE__ */ tagged("Aborted")();
 export type Aborted = ReturnType<typeof Aborted>;
 const ABORTED: Result<Aborted, never> = /* @__PURE__ */ err(Aborted({}));
@@ -155,8 +156,10 @@ export async function mapConcurrent<E, A, B>(
 }
 
 /**
- * Like `mapConcurrent` but never stops early: runs everything and reports
- * all errors (or all values). Use for batch jobs and input validation.
+ * Like `mapConcurrent` but does not stop on failures: every item gets its turn and
+ * all errors (or all values) are reported. Use for batch jobs and input validation.
+ * The one thing that does stop it is the caller's signal: after an abort no new item
+ * starts and the outcome is `Aborted` (the union widens only when a signal is passed).
  */
 export function validateConcurrent<E, A, B>(
   items: ReadonlyArray<A>,

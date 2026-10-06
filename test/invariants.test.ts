@@ -80,6 +80,16 @@ describe("repository invariant enforcement", () => {
     expect(checkInvariants(root)).toEqual([]);
   });
 
+  it("checks ARCHITECTURE.md's module table line counts against the files (within 25% or 40 lines)", () => {
+    write("src/big.ts", Array.from({ length: 200 }, (_, i) => `export const v${i} = ${i};`).join("\n"));
+    write("ARCHITECTURE.md", "| Module | Role | Lines |\n|---|---|---|\n| `src/result.ts` | core | 1 |\n| `src/big.ts` | big | 100 |\n| `src/missing.ts` | gone | 5 |\n");
+    const rules = checkInvariants(root).map((v) => v.rule);
+    expect(rules).toContain("architecture-line-counts"); // big.ts: 200 vs 100 is outside ±50
+    expect(rules.filter((r) => r === "architecture-line-counts")).toHaveLength(1); // result.ts is within ±40; missing.ts is skipped here
+    write("ARCHITECTURE.md", "| Module | Role | Lines |\n|---|---|---|\n| `src/big.ts` | big | 180 |\n");
+    expect(checkInvariants(root).map((v) => v.rule)).not.toContain("architecture-line-counts");
+  });
+
   it("requires real property suites and mentions of every behavioral export", () => {
     write("src/async.ts", "export const run = () => 1;");
     expect(checkInvariants(root).map((v) => v.rule)).toContain("property-tests-exist");

@@ -112,6 +112,23 @@ export const checkInvariants = (root: string): Violation[] => {
     }
   }
 
+  // ---- 3a. ARCHITECTURE.md's module table carries real line counts (core belief 3: measured, not remembered) ----
+  const archFile = join(root, "ARCHITECTURE.md");
+  if (existsSync(archFile)) {
+    readFileSync(archFile, "utf8").split("\n").forEach((text, i) => {
+      const m = /^\| `src\/([a-z-]+\.ts)` \|.*\| (\d+) \|\s*$/.exec(text);
+      if (m === null) return;
+      const file = join(root, "src", m[1] as string);
+      if (!existsSync(file)) return; // the module-table-vs-files rule reports that separately
+      const actual = readFileSync(file, "utf8").split("\n").length;
+      const claimed = Number(m[2]);
+      const tolerance = Math.max(40, Math.round(actual * 0.25));
+      if (Math.abs(actual - claimed) > tolerance) {
+        violations.push({ file: "ARCHITECTURE.md", line: i + 1, rule: "architecture-line-counts", message: `src/${m[1]} is listed as ${claimed} lines but has ${actual} — fix: update the Lines column (tolerance ±${tolerance}); numbers in docs are measured, not remembered` });
+      }
+    });
+  }
+
   // ---- 3b. time-dependent modules: every export has a property test ----
   // Example tests show the cases we thought of; the subtle cancellation bugs live in
   // the cases we did not. Each exported function of async.ts / lanes.ts / capabilities.ts
