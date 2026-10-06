@@ -10,10 +10,10 @@ Graded per module on four axes: **Types** (does the signature say everything), *
 | `tagged.ts` | A | A | B | A | authoritative tag and conflicting-field types tested; `tagged()` spreads fields (cold path: errors only) |
 | `match.ts` | A | A | A | A | compile-time exhaustiveness tested with `@ts-expect-error` |
 | `fn.ts` | A | A | A | B | `pipe` overloads to 8; no `flow` (by design, add on demand) |
-| `decode.ts` | A | A | A | A | round-trip, regex state, own-property and 300,000-issue regressions; measured `oneOf` and accumulation gains; union reporting and ISO grammar gaps tracked |
+| `decode.ts` | A | A | B | A | round-trip, regex state, own-property and 300,000-issue regressions; strict `isoDate` + `dateFromString`; `oneOf` reports every alternative; measured vs Zod/Valibot (15–30% faster) and ArkType (3–4x slower on valid input — tracked optimization target) |
 | `capabilities.ts` | A | A | A | A | seeded PRNG determinism tested |
 | `async.ts` | A | A | A | A | model-based schedules, abort points and leak checks; cancellation signatures tested; map/validation CPU overhead now benchmarked |
-| `lanes.ts` | A | A | B | A | model-based properties and cancellation races; semaphore CPU overhead measured; trigger throughput for other lanes remains unmeasured |
+| `lanes.ts` | A | A | A | A | model-based properties and cancellation races; every lane's per-trigger cost measured with ratio gates in the check; semaphore queue made linear |
 | `testing.ts` | A | A | — | A | helpers proven against R/O and a broken functor; `FastCheckLike` is public surface |
 | `index.ts` | A | — | — | A | surface documented in ARCHITECTURE.md |
 | `tools/check` (two-track-check) | A | A | — | A | TS 6 API; rule, CLI, config and project-loading fixtures; 99.48% lines / 91.89% branches; self-check and examples |

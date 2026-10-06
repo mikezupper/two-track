@@ -243,7 +243,21 @@ export type Semaphore = {
  */
 export const semaphore = (permits: number, options: LaneOptions = {}): Semaphore => {
   let free = Math.max(1, Math.floor(permits) || 1);
-  const waiters: Array<() => void> = [];
+  // FIFO queue with a head index instead of Array.shift(): V8 left-trims only small arrays,
+  // so shift() on a large queue is O(n) and 200k waiters went quadratic (measured ~20 s;
+  // bench/lanes.ts). Aborted waiters are tombstoned (lazy deletion) instead of spliced out,
+  // which keeps the abort path O(1) too. The array is compacted once the dead prefix
+  // dominates so memory does not grow without bound under churn.
+  type Waiter = { grant: () => void; live: boolean };
+  let waiters: Waiter[] = [];
+  let head = 0;
+
+  const compact = (): void => {
+    if (head > 1024 && head * 2 > waiters.length) {
+      waiters = waiters.slice(head);
+      head = 0;
+    }
+  };
 
   const acquire = (signal: AbortSignal): Promise<boolean> => {
     if (signal.aborted) return Promise.resolve(false);
@@ -252,25 +266,33 @@ export const semaphore = (permits: number, options: LaneOptions = {}): Semaphore
       return Promise.resolve(true);
     }
     return new Promise<boolean>((resolve) => {
-      const grant = (): void => {
-        signal.removeEventListener("abort", onAbort);
-        free--;
-        resolve(true);
+      const waiter: Waiter = {
+        live: true,
+        grant: () => {
+          signal.removeEventListener("abort", onAbort);
+          free--;
+          resolve(true);
+        },
       };
       const onAbort = (): void => {
-        const i = waiters.indexOf(grant);
-        if (i >= 0) waiters.splice(i, 1);
+        waiter.live = false; // tombstone; release() skips it
         resolve(false);
       };
       signal.addEventListener("abort", onAbort, { once: true });
-      waiters.push(grant);
+      waiters.push(waiter);
     });
   };
 
   const release = (): void => {
     free++;
-    const next = waiters.shift();
-    if (next !== undefined) next();
+    while (head < waiters.length) {
+      const next = waiters[head++] as Waiter;
+      if (next.live) {
+        next.grant();
+        break;
+      }
+    }
+    compact();
   };
 
   return {

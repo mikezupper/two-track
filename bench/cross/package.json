@@ -6,5 +6,11 @@
   "scripts": {
     "bench": "node decoders-vs.mjs && node railway-vs.mjs"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "arktype": "2.2.7",
+    "effect": "4.0.1",
+    "ramda": "0.32.0",
+    "valibot": "1.5.0",
+    "zod": "4.6.5"
+  }
 }

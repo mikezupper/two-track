@@ -74,3 +74,36 @@ describe("defects closed after the project review", () => {
     expect(match({ _tag: "A" as const }, { A: () => 1 })).toBe(1);
   });
 });
+
+describe("semaphore queue complexity (found by bench/lanes.ts)", () => {
+  it("200k waiters drain in linear time: shift()/indexOf were quadratic on V8", async () => {
+    const sem = Lane.semaphore(1);
+    const gate = new Promise<Result<never, number>>((resolve) => setTimeout(() => resolve(ok(0)), 1));
+    const first = sem.run(() => gate);
+    const n = 200_000;
+    const t0 = performance.now();
+    const rest = Array.from({ length: n }, (_, i) => sem.run(async () => ok(i)));
+    await first;
+    const results = await Promise.all(rest);
+    const elapsed = performance.now() - t0;
+    expect(results.every((r, i) => r.ok && r.value === i)).toBe(true); // FIFO preserved
+    expect(sem.available()).toBe(1);
+    expect(elapsed).toBeLessThan(5_000); // quadratic took ~20 s; linear is well under a second
+  });
+
+  it("aborted waiters are tombstoned, skipped in O(1), and never granted", async () => {
+    const sem = Lane.semaphore(1);
+    const hold = new Promise<Result<never, string>>((resolve) => setTimeout(() => resolve(ok("held")), 2));
+    const holder = sem.run(() => hold);
+    const controllers = Array.from({ length: 5_000 }, () => new AbortController());
+    const waiters = controllers.map((c, i) => sem.run(async () => ok(i), c.signal));
+    controllers.forEach((c, i) => { if (i % 2 === 0) c.abort(); });
+    const last = sem.run(async () => ok("last"));
+    expect(await holder).toEqual(ok("held"));
+    const settled = await Promise.all(waiters);
+    expect(settled.filter((r) => !r.ok).length).toBe(2_500);
+    expect(settled.filter((r) => r.ok).length).toBe(2_500);
+    expect(await last).toEqual(ok("last"));
+    expect(sem.available()).toBe(1);
+  });
+});

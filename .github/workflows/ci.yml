@@ -22,6 +22,8 @@ jobs:
         run: pnpm lint
       - name: Tests (unit, properties, structural, example) with coverage thresholds
         run: pnpm test:coverage
+      - name: Lane throughput gates (ratios vs a same-run baseline; machine-independent)
+        run: pnpm check:lanes
       - name: Build (rewrites .ts specifiers in declarations)
         run: pnpm build
       - name: Consumer bundle size and runtime checks (Rolldown and esbuild)
@@ -32,3 +34,5 @@ jobs:
         run: pnpm check:tools
       - name: Benchmark (report only on shared runners; the 4x ratio is enforced locally via pnpm bench:check)
         run: pnpm bench
+      - name: Third-party comparisons (report only; decoders vs Zod/Valibot/ArkType, railway vs Ramda/Effect)
+        run: pnpm bench:cross

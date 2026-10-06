@@ -33,6 +33,10 @@ Same-turn switch bursts supersede earlier calls even when their runs resolved im
 
 A `semaphore` run that throws releases its permit before the rejection re-surfaces: a defect in one caller must not become a deadlock for the next.
 
+## Amendment (2026-10-05, measured throughput)
+
+`bench/lanes.ts` measures every lane against a same-run direct-call baseline. It found the `semaphore` waiter queue quadratic on V8 (`shift`/`indexOf`), now a head-index FIFO with tombstoned aborts (376x → 7x). It also quantified the price of `switchLane`/`debounce` semantics at ~10 µs per trigger on V8, which the README now states so these lanes are used for user-rate triggers and not inside per-row loops. The gates (immediate ≤ 75x, waiting ≤ 100x) run in `pnpm check` and CI.
+
 ## Consequences
 
 - Lanes live in the shell (UI event handlers, HTTP adapters), never in `domain/`; the skill's decision table says so.

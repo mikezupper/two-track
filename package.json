@@ -19,16 +19,56 @@
       "import": "./dist/testing.js",
       "default": "./dist/testing.js"
     },
-    "./result": { "types": "./dist/result.d.ts", "import": "./dist/result.js", "default": "./dist/result.js" },
-    "./option": { "types": "./dist/option.d.ts", "import": "./dist/option.js", "default": "./dist/option.js" },
-    "./decode": { "types": "./dist/decode.d.ts", "import": "./dist/decode.js", "default": "./dist/decode.js" },
-    "./async": { "types": "./dist/async.d.ts", "import": "./dist/async.js", "default": "./dist/async.js" },
-    "./capabilities": { "types": "./dist/capabilities.d.ts", "import": "./dist/capabilities.js", "default": "./dist/capabilities.js" },
-    "./lanes": { "types": "./dist/lanes.d.ts", "import": "./dist/lanes.js", "default": "./dist/lanes.js" },
-    "./tagged": { "types": "./dist/tagged.d.ts", "import": "./dist/tagged.js", "default": "./dist/tagged.js" },
-    "./match": { "types": "./dist/match.d.ts", "import": "./dist/match.js", "default": "./dist/match.js" },
-    "./fn": { "types": "./dist/fn.d.ts", "import": "./dist/fn.js", "default": "./dist/fn.js" },
-    "./brand": { "types": "./dist/brand.d.ts", "import": "./dist/brand.js", "default": "./dist/brand.js" },
+    "./result": {
+      "types": "./dist/result.d.ts",
+      "import": "./dist/result.js",
+      "default": "./dist/result.js"
+    },
+    "./option": {
+      "types": "./dist/option.d.ts",
+      "import": "./dist/option.js",
+      "default": "./dist/option.js"
+    },
+    "./decode": {
+      "types": "./dist/decode.d.ts",
+      "import": "./dist/decode.js",
+      "default": "./dist/decode.js"
+    },
+    "./async": {
+      "types": "./dist/async.d.ts",
+      "import": "./dist/async.js",
+      "default": "./dist/async.js"
+    },
+    "./capabilities": {
+      "types": "./dist/capabilities.d.ts",
+      "import": "./dist/capabilities.js",
+      "default": "./dist/capabilities.js"
+    },
+    "./lanes": {
+      "types": "./dist/lanes.d.ts",
+      "import": "./dist/lanes.js",
+      "default": "./dist/lanes.js"
+    },
+    "./tagged": {
+      "types": "./dist/tagged.d.ts",
+      "import": "./dist/tagged.js",
+      "default": "./dist/tagged.js"
+    },
+    "./match": {
+      "types": "./dist/match.d.ts",
+      "import": "./dist/match.js",
+      "default": "./dist/match.js"
+    },
+    "./fn": {
+      "types": "./dist/fn.d.ts",
+      "import": "./dist/fn.js",
+      "default": "./dist/fn.js"
+    },
+    "./brand": {
+      "types": "./dist/brand.d.ts",
+      "import": "./dist/brand.js",
+      "default": "./dist/brand.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -51,11 +91,14 @@
     "bench:hot": "node bench/hot-paths.ts",
     "bench:bundle": "node bench/bundles.mjs && node bench/bundles.mjs --bundler esbuild",
     "check:bundle": "node bench/bundles.mjs --check && node bench/bundles.mjs --bundler esbuild --check",
-    "check": "pnpm typecheck && pnpm lint && pnpm test:coverage && pnpm bench:check && pnpm build && pnpm check:bundle && pnpm check:package && pnpm check:tools",
+    "check": "pnpm typecheck && pnpm lint && pnpm test:coverage && pnpm bench:check && pnpm check:lanes && pnpm build && pnpm check:bundle && pnpm check:package && pnpm check:tools",
     "example": "node examples/checkout.ts",
     "bench:check": "node bench/encodings.ts --check",
     "check:tools": "pnpm -r --filter two-track-check check",
-    "check:package": "node scripts/check-package.mjs"
+    "check:package": "node scripts/check-package.mjs",
+    "bench:cross": "pnpm --filter two-track-bench-cross bench",
+    "bench:lanes": "node bench/lanes.ts",
+    "check:lanes": "node bench/lanes.ts --check"
   },
   "devDependencies": {
     "@types/node": "^26.6.4",

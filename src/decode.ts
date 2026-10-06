@@ -10,7 +10,8 @@
  * Speed: a decoder is straight-line `typeof` checks. The path is a mutable
  * stack owned by the decode call — pushed/popped by containers, copied only
  * when an issue is recorded — so the success path allocates nothing but the
- * output.
+ * output. Measured (bench/cross): 15–30% faster than Zod/Valibot, 3–4x slower
+ * than ArkType's JIT-compiled validator on valid input; see benchmarks.md.
  */
 
 import type { Brand } from "./brand.ts";

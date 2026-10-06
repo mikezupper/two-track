@@ -29,6 +29,7 @@ All notable changes to `two-track` are recorded here. The format follows Keep a 
 - Packaging: `exports` gained `default` conditions and `./package.json`; declaration files no longer import `.ts` specifiers; `engines.node` is `>=20` for consumers (contributing still needs Node ≥ 22.18 for type stripping); `publishConfig` with provenance and a tag-driven release workflow.
 
 ### Fixed
+- `Lane.semaphore` was quadratic on V8 with a large waiting queue (`Array.shift()` in `release`, `indexOf`/`splice` on abort): 376x the direct-call baseline at 200k waiters. The queue is now a head-index FIFO with tombstoned aborts and periodic compaction (7x). Found by the new `bench/lanes.ts`; pinned by a linear-drain test.
 - `Lane.semaphore` released no permit when a run threw (a defect turned into a deadlock for every later caller); the permit is released and the rejection re-surfaces.
 - `Async.mapConcurrent` left its outer-signal listener attached and let sibling workers run on when `f` rejected; siblings are now aborted, the listener removed, and the defect rejects the call.
 - `Async.validateConcurrent` kept launching new items after an outer abort; it now stops launching and returns `Aborted` (the union gains `Aborted` only when a `signal` is supplied, as for `mapConcurrent`).
@@ -42,6 +43,8 @@ All notable changes to `two-track` are recorded here. The format follows Keep a 
 - `Async.retry` ran one extra attempt, with an already-aborted signal, when the abort happened during the backoff wait (reported downstream; see docs/exec-plans/completed/0002-downstream-findings.md).
 
 ### Testing
+- `pnpm bench:lanes` / `pnpm check:lanes`: per-trigger overhead of every lane under immediate and waiting workloads with heap-retention figures; `--check` enforces ratio gates against a same-run baseline and is part of `pnpm check` and CI.
+- `pnpm bench:cross` (workspace `bench/cross`, own dev deps): decoders versus Zod 4 / Valibot / ArkType on an identical schema with a validity-agreement assertion, and the railway versus Ramda / Effect from the built `dist/`; both run report-only in CI. The root README's "as fast as compiled validators" claim was measured, found false for valid input against ArkType, and replaced by the table.
 - CLI, config/project failure paths, direct subpath imports, negative architecture invariants, large nested decoding and cancellation race regressions; HTML and JSON coverage reports for both packages.
 - Model-based fast-check properties for `async`, `lanes` and `capabilities` (event sequences over `manualSleeper`/`controlledClock`, leak checks); enforced per export by the invariants script.
 - `pnpm check:package`: packs the tarball, installs it, and verifies import/require/`package.json` and `tsc` with `skipLibCheck: false` under TypeScript 6 and 7.

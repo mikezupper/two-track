@@ -80,14 +80,25 @@ Consumer bundles are also measured with Rolldown and esbuild. Direct subpath imp
 
 | Approach | Node 24 | Bun 1.3 |
 |---|---|---|
-| Ramda `pipeWith(chain)` over a Fantasy Land `Result` | 239 ms | 221 ms |
-| Ramda idiomatic point-free (`ifElse`, `converge`, `when`, placeholders) | 514 ms | 519 ms |
-| Effect 4 `Effect.gen`, one `runSync` per item | 1923 ms | 969 ms |
-| Effect 4 `Effect.forEach`, one `runSync` for the batch | 1631 ms | 1144 ms |
+| Ramda `pipeWith(chain)` over a Fantasy Land `Result` | 319 ms | 244 ms |
+| Ramda idiomatic point-free (`ifElse`, `converge`, `when`, placeholders) | 620 ms | 553 ms |
+| Effect 4 `Effect.gen`, one `runSync` per item | 2392 ms | 1410 ms |
+| Effect 4 `Effect.forEach`, one `runSync` for the batch | 1919 ms | 1269 ms |
 | Rust `Result` + `?` compiled to WASM, batched, integer arguments | 4 ms | 3 ms |
 | Rust `Result` + `?` compiled to WASM, one call per item, integer arguments | 8 ms | 4 ms |
 | Native Rust binary, same code | 1.5 ms | — |
 | JSON serialize + parse of the same one million objects (the WASM boundary floor for real data) | 439 ms | — |
+
+**Decoders versus the field** (`pnpm bench:cross`; identical schema, non-throwing APIs, 200k objects, best of 7; all four agree on validity)
+
+| Library | Node 24, valid | Node 24, 10% invalid | Bun 1.3, valid | ns per valid object (Node) |
+|---|---|---|---|---|
+| two-track 0.1.0 | 171 ms | 175 ms | 103 ms | 855 |
+| zod 4.6.5 | 204 ms | 237 ms | 149 ms | 1021 |
+| valibot 1.5.0 | 223 ms | 231 ms | 151 ms | 1116 |
+| arktype 2.2.7 | **46 ms** | 286 ms | **35 ms** | **230** |
+
+Honest reading: two-track's decoders are 15–30% faster than Zod and Valibot and the fastest when input is partly invalid, but ArkType's JIT-compiled validator is 3–4x faster on valid input. If decoding valid input is your bottleneck, ArkType wins and this README says so; the profile of where two-track's nanoseconds go is in the benchmarks file and is tracked as the next optimization target.
 
 Three conclusions drive the whole design:
 
@@ -360,6 +371,8 @@ const row = await db.run((signal) => repo.find(id, signal));
 ```
 
 Each lane adds its failure mode to the returned union (`E | Superseded`, `E | Busy`, `E | QueueFull | Busy`), so a `match` at the edge is forced to say what a superseded search or a full queue looks like to the user.
+
+Cost, measured (`pnpm bench:lanes`, Node 24): `queueLane`, `throttle` and `semaphore` add 0.5–2 µs per trigger; `switchLane` and `debounce` add ~10 µs on V8 (about 1.5 µs on Bun) because each trigger allocates a controller, a race and an abort dispatch. That is the right price for keystrokes, clicks and webhooks, and the wrong tool inside a per-row loop, where `Async.mapConcurrent` or a `semaphore` belongs. `pnpm check:lanes` fails if any lane exceeds a ratio gate against a same-run baseline.
 
 ### Testing helpers: laws in one line
 

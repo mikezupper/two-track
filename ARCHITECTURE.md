@@ -79,7 +79,7 @@ your-app/src/
 | Directory | Purpose |
 |---|---|
 | `test/` | vitest: unit tests, fast-check law/round-trip properties, `*.properties.test.ts` model-based schedules for async/lanes/capabilities, `architecture.test.ts` (runs the invariants), `examples.test.ts` |
-| `bench/` | `encodings.ts` (the encoding table; `--check` enforces the ratio), `cross-library.mjs` (Ramda/Effect rows; plain JS, needs those packages installed) |
+| `bench/` | `encodings.ts` (the encoding table; `--check` enforces the ratio), `hot-paths.ts` (decoder/async CPU overhead), `lanes.ts` (lane throughput; `--check` enforces ratios vs a baseline), `bundles.mjs` (consumer bundle budgets), `cross/` (a private workspace with its own deps: decoders vs Zod/Valibot/ArkType, railway vs Ramda/Effect; report-only) |
 | `scripts/` | `invariants.ts` (this repo's own rules, incl. property-test coverage) and `lint-invariants.ts` (the CLI); `fix-dts-extensions.ts` (post-build `.ts`→`.js` in declarations); `check-package.mjs` (consumer check) |
 | `tools/check/` | `two-track-check`: the application-level checker (own package.json, TypeScript 6, vitest fixtures per rule, README) |
 | `examples/` | `checkout.ts`: a full workflow — decode, price, reserve, retry, place — with fakes and an HTTP-ish edge |
