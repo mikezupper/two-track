@@ -161,7 +161,7 @@ export const optional = <A>(decoder: Decoder<A>): Decoder<A | undefined> & { rea
   return { decode: (input) => toResult(run(input, [], undefined)), run, optional: true, inner: decoder as Decoder<unknown>, node: { kind: "optional", inner: decoder as Decoder<unknown> } };
 };
 
-export const array = <A>(item: Decoder<A>): Decoder<A[]> => {
+export const array = <A>(item: Decoder<A>): Decoder<ReadonlyArray<A>> => {
   const prim = item.prim;
   return make((input, path, key) => {
     if (!Array.isArray(input)) return fail(path, key, "expected array");
@@ -188,8 +188,9 @@ export const array = <A>(item: Decoder<A>): Decoder<A[]> => {
   }, undefined, { kind: "array", item: item as Decoder<unknown> });
 };
 
-export const nonEmptyArray = <A>(item: Decoder<A>): Decoder<[A, ...A[]]> =>
-  refine(array(item), (xs) => xs.length > 0, "expected non-empty array") as Decoder<[A, ...A[]]>;
+/** Decoded collections are `readonly`: immutability is a type-level property here (decision 0003). */
+export const nonEmptyArray = <A>(item: Decoder<A>): Decoder<readonly [A, ...A[]]> =>
+  refine(array(item), (xs) => xs.length > 0, "expected non-empty array") as Decoder<readonly [A, ...A[]]>;
 
 
 export const record = <A>(value: Decoder<A>): Decoder<Record<string, A>> =>

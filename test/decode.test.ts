@@ -166,7 +166,7 @@ describe("containers", () => {
   });
 
   it("lazy supports recursive shapes", () => {
-    type Tree = { readonly value: number; readonly children: Tree[] };
+    type Tree = { readonly value: number; readonly children: ReadonlyArray<Tree> };
     const Tree: D.Decoder<Tree> = D.lazy(() => D.struct({ value: D.number, children: D.array(Tree) }));
     expect(Tree.decode({ value: 1, children: [{ value: 2, children: [] }] })).toEqual(ok({ value: 1, children: [{ value: 2, children: [] }] }));
     expect(issues(Tree.decode({ value: 1, children: [{ value: "x", children: [] }] }))).toEqual(["children.0.value|expected finite number"]);
