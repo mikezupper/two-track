@@ -5,6 +5,7 @@ All notable changes to `two-track` are recorded here. The format follows Keep a 
 ## [Unreleased]
 
 ### Added
+- `D.compile` now generates native code for `taggedUnion` (if/else over the discriminant, the unknown-tag issue at the same path as the interpreter) and `record`; the opaque set is down to `map`, `andThen`, `custom`, `lazy`, `oneOf`, `json`, and `refine` over a non-primitive. `pattern` checks run inline (`regex.test`) in both the interpreter and the generated code, with the caller's regex never touched and global/sticky regexes reset.
 - `D.compile(decoder)` (decision 0014): opt-in code-generated decoder for the structural subset, identical semantics by construction (property-tested), 2.6–2.8x the interpreter on the regex-heavy bench schema, 4.0x on a flat struct and up to 4.8x without regexes (interleaved A/B, benchmarks.md); returns the decoder unchanged where `new Function` is forbidden (CSP, Cloudflare Workers).
 - Direct module subpaths (`two-track/result`, `option`, `decode`, `async`, `capabilities`, `lanes`, `tagged`, `match`, `fn`, `brand`) for smaller consumer bundles while preserving root namespaces.
 - Decoder/async throughput benchmarks and Rolldown/esbuild consumer bundle checks with byte budgets and runtime smoke checks.

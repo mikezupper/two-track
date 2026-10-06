@@ -174,7 +174,7 @@ Every module is a subpath (`two-track/result`, `two-track/decode`, …) because 
 
 ### Decision 14: A faster decoder protocol, and `compile` as an opt-in
 
-The interpreter allocates one `Result` per decode instead of per field, passes keys down instead of pushing them onto the path, fuses primitive refinements, and checks primitive fields inline from one descriptor per field. That is 1.2–1.5x and leaves it ~1.7x above the generic-loop floor. `D.compile` generates literal-key code for the structural subset and calls the interpreter for everything else, so it is equivalent by construction and property-tested as such; it is opt-in because it uses `new Function`, and it falls back to the interpreter where that is forbidden.
+The interpreter allocates one `Result` per decode instead of per field, passes keys down instead of pushing them onto the path, fuses primitive refinements, and checks primitive fields inline from one descriptor per field. That is 1.2–1.5x and leaves it ~1.7x above the generic-loop floor. `D.compile` generates literal-key code for the structural subset (struct, array, record, taggedUnion, primitives with inline regex checks, optional, nullable, option, literal) and calls the interpreter for everything else, so it is equivalent by construction and property-tested as such; it is opt-in because it uses `new Function`, and it falls back to the interpreter where that is forbidden.
 
 Also amended: `Async.retry` now requires `retriable`. Defaulting to "retry everything" was a foot-gun.
 

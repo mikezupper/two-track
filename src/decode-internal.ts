@@ -36,7 +36,8 @@ export const isFailure = (x: unknown): x is Failure => typeof x === "object" && 
 export type Run<A> = (input: unknown, path: PathSegment[], key: PathSegment | undefined) => A | Failure;
 
 export type Prim = "string" | "number" | "integer" | "boolean";
-export type Check = { readonly test: (a: never) => boolean; readonly message: string };
+/** A fused primitive check. `regex` is set by `pattern` so the interpreter and the compiler can run `regex.test` inline instead of calling a closure. */
+export type Check = { readonly test: (a: never) => boolean; readonly message: string; readonly regex?: RegExp };
 
 export type Decoder<A> = {
   readonly decode: (input: unknown) => Result<DecodeError, A>;
@@ -69,7 +70,9 @@ export type Node =
   | { readonly kind: "nullable"; readonly inner: Decoder<unknown> }
   | { readonly kind: "option"; readonly inner: Decoder<unknown> }
   | { readonly kind: "optional"; readonly inner: Decoder<unknown> }
-  | { readonly kind: "literal"; readonly values: ReadonlyArray<string | number | boolean | null> };
+  | { readonly kind: "literal"; readonly values: ReadonlyArray<string | number | boolean | null> }
+  | { readonly kind: "record"; readonly value: Decoder<unknown> }
+  | { readonly kind: "taggedUnion"; readonly discriminant: string; readonly variants: Readonly<Record<string, Decoder<unknown>>>; readonly expected: string };
 
 export type Infer<D> = D extends Decoder<infer A> ? A : never;
 
@@ -127,7 +130,11 @@ export const primIssue = (prim: NonNullable<Decoder<unknown>["prim"]>, input: un
   const checks = prim.checks;
   for (let i = 0; i < checks.length; i++) {
     const c = checks[i] as Check;
-    if (!c.test(input as never)) return c.message;
+    if (c.regex !== undefined) {
+      // inline regex path (no closure call); a global/sticky regex is reset so it is stateless
+      if (c.regex.global || c.regex.sticky) c.regex.lastIndex = 0;
+      if (!c.regex.test(input as string)) return c.message;
+    } else if (!c.test(input as never)) return c.message;
   }
   return undefined;
 };

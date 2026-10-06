@@ -129,3 +129,46 @@ describe("D.compile falls back when new Function is forbidden (CSP)", () => {
     same(fresh.compile(S).decode({ a: 1 }), ok({ a: 1 }));
   });
 });
+
+describe("D.compile: taggedUnion and record are compiled natively (not delegated)", () => {
+  const Shape = D.taggedUnion("kind", {
+    circle: D.struct({ kind: D.literal("circle"), radius: D.min(D.number, 0) }),
+    square: D.struct({ kind: D.literal("square"), side: D.pattern(/^\d+$/) }),
+  });
+  const Bag = D.record(D.array(Shape));
+  const Outer = D.struct({ bag: Bag, one: Shape });
+  const C = D.compile(Outer);
+
+  it("matches the interpreter on valid, wrong-tag, non-string-tag, nested-path and risky-key inputs", () => {
+    const cases: unknown[] = [
+      { bag: { a: [{ kind: "circle", radius: 1 }], b: [] }, one: { kind: "square", side: "12" } },
+      { bag: { a: [{ kind: "hexagon" }] }, one: { kind: "circle", radius: -1 } },
+      { bag: { a: [{ kind: 7 }] }, one: {} },
+      { bag: { constructor: [{ kind: "circle", radius: 2 }], ["__proto__"]: [] }, one: { kind: "square", side: "x" } },
+      { bag: [], one: null },
+      { bag: { a: [1, { kind: "circle", radius: "r" }] }, one: { kind: "square", side: "3" } },
+    ];
+    for (const input of cases) same(C.decode(input), Outer.decode(input));
+    const r = C.decode({ bag: { a: [{ kind: "hexagon" }] }, one: { kind: "circle", radius: 1 } });
+    expect(r.ok ? [] : r.error.issues.map((i) => i.path.join("."))).toEqual(["bag.a.0.kind"]);
+    const polluted = C.decode(JSON.parse('{"bag":{"__proto__":[{"kind":"circle","radius":1}]},"one":{"kind":"circle","radius":0}}') as unknown);
+    expect(polluted.ok && Object.getPrototypeOf(polluted.value.bag)).toBe(Object.prototype);
+    expect(polluted.ok && Object.hasOwn(polluted.value.bag, "__proto__")).toBe(true);
+  });
+
+  it("property: identical results for generated bags and arbitrary inputs", () => {
+    const arbShape = fc.oneof(fc.record({ kind: fc.constant("circle"), radius: fc.double({ min: 0, noNaN: true, noDefaultInfinity: true }) }), fc.record({ kind: fc.constant("square"), side: fc.stringMatching(/^\d{1,5}$/) }), fc.record({ kind: fc.string() }));
+    fc.assert(fc.property(fc.record({ bag: fc.dictionary(fc.string(), fc.array(arbShape, { maxLength: 3 })), one: arbShape }), (v) => { same(C.decode(v), Outer.decode(v)); }), { numRuns: 300 });
+    fc.assert(fc.property(fc.anything(), (x) => { same(C.decode(x), Outer.decode(x)); }), { numRuns: 300 });
+  });
+
+  it("pattern checks run inline in both engines and keep caller regexes untouched", () => {
+    const re = /^a+$/g;
+    const P = D.pattern(re);
+    const PC = D.compile(D.struct({ p: P }));
+    re.lastIndex = 1;
+    for (const s of ["aaa", "aab", "", "a"]) same(PC.decode({ p: s }), D.struct({ p: P }).decode({ p: s }));
+    expect(re.lastIndex).toBe(1); // the caller's regex state is never touched
+    expect(P.decode("aa").ok && P.decode("aa").ok).toBe(true); // a global regex is reset between calls
+  });
+});

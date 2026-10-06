@@ -108,18 +108,10 @@ export const brand = <A, Name extends string>(decoder: Decoder<A>, _name: Name):
   decoder as unknown as Decoder<Brand<A, Name>>;
 
 export const pattern = (regex: RegExp, message = `expected string matching ${regex}`): Decoder<string> => {
+  // The regex is owned (the caller's lastIndex is never touched) and attached to the check, so
+  // primIssue and the compiler test it inline rather than through a closure (decision 0014 follow-up).
   const owned = new RegExp(regex.source, regex.flags);
-  const sticky = owned.global || owned.sticky;
-  return refine(
-    string,
-    sticky
-      ? (s) => {
-          owned.lastIndex = 0;
-          return owned.test(s);
-        }
-      : (s) => owned.test(s),
-    message,
-  );
+  return primitive<string>("string", [{ test: (s: string) => owned.test(s), message, regex: owned }]);
 };
 
 export const nonEmptyString: Decoder<string> = /* @__PURE__ */ refine(string, (s) => s.length > 0, "expected non-empty string");
@@ -194,7 +186,7 @@ export const nonEmptyArray = <A>(item: Decoder<A>): Decoder<readonly [A, ...A[]]
 
 
 export const record = <A>(value: Decoder<A>): Decoder<Record<string, A>> =>
-  make((input, path, key) => {
+  make<Record<string, A>>((input, path, key) => {
     if (typeof input !== "object" || input === null || Array.isArray(input)) return fail(path, key, "expected object");
     const nested = key !== undefined;
     if (nested) path.push(key);
@@ -207,7 +199,7 @@ export const record = <A>(value: Decoder<A>): Decoder<Record<string, A>> =>
     }
     if (nested) path.pop();
     return issues === undefined ? out : failWith(issues);
-  });
+  }, undefined, { kind: "record", value: value as Decoder<unknown> });
 
 type Fields = Record<string, Decoder<unknown>>;
 type OptionalKeys<F extends Fields> = { [K in keyof F]: F[K] extends { readonly optional: true } ? K : never }[keyof F];
@@ -292,7 +284,7 @@ export const taggedUnion = <Key extends string, V extends Variants<Key>>(
       return f;
     }
     return (variants[tag] as Decoder<Infer<V[keyof V]>>).run(input, path, key);
-  });
+  }, undefined, { kind: "taggedUnion", discriminant, variants: variants as Readonly<Record<string, Decoder<unknown>>>, expected });
 };
 
 /**

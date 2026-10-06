@@ -28,6 +28,10 @@ Two layers, both keeping the public contract (messages, paths, accumulation orde
 - **Compile by default.** Rejected: `new Function` is a CSP decision users must make knowingly, and generated code is less legible for debugging. Opt-in with a guaranteed-equivalent fallback keeps both.
 - **Return the input object when nothing was transformed** (ArkType's no-morph path, ~10 ns). Rejected: the output must contain only declared keys and must not alias the input; those are correctness properties users rely on.
 
+## Amendment (2026-10-06, follow-up)
+
+The compiled subset grew to `taggedUnion` and `record` (the two opaque nodes most likely on a hot path: every event stream is a tagged union), each covered by dedicated equivalence tests including unknown and non-string tags, nested paths, `__proto__` keys and `fc.anything()`. `pattern` carries its `RegExp` on the fused check so `primIssue` and the generated code call `regex.test` directly instead of through a closure. Measured effect of the regex change on the bench schema (three patterns): compiled/ArkType 1.40x → ~1.36x in the same run; the interpreter moved within noise. The remaining opaque nodes are `map`, `andThen`, `custom`, `lazy`, `oneOf`, `json`, and `refine` over a non-primitive.
+
 ## Consequences
 
 - `two-track/decode` selective bundles grew ~1 kB for the faster protocol; `compile` is tree-shaken unless imported (verified). Bundle budgets raised with the reason recorded in `bench/bundles.mjs`.

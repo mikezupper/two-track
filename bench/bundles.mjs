@@ -42,7 +42,9 @@ const sizes = {};
 // 1.2–1.5x interpreter speed; `compile` itself is NOT retained unless imported (verified with
 // esbuild: no `new Function` in a struct-only consumer). The full-surface bundle includes the
 // compiler (~4 kB). Budgets below are tripwires set ~10% above those measurements.
-const budgets = { resultDirect: 160, decoderDirect: 2500, primitiveDirect: 1150, interopDirect: 220, concurrentDirect: 800, switchDirect: 900, full: 22_500, testing: 1600 };
+// 2026-10-06 (later): `compile` gained native taggedUnion/record emitters (+~1.8 kB in the full
+// surface only; selective consumers unchanged because compile is tree-shaken unless imported).
+const budgets = { resultDirect: 160, decoderDirect: 2500, primitiveDirect: 1150, interopDirect: 220, concurrentDirect: 800, switchDirect: 900, full: 24_500, testing: 1600 };
 try {
   for (const [name, code] of Object.entries(cases)) {
     const input = join(work, `${name}.mjs`);

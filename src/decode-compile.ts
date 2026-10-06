@@ -5,10 +5,10 @@
  * is a generic property load, and that alone is ~94 ns per four-field object on V8.
  * JIT-compiled validators (ArkType, ajv, typia) are 5–7x faster because they emit
  * LITERAL property accesses (`o.id`, `out.id = …`) that the engine inlines. This
- * module does the same for the structural subset — struct, array, primitives with
- * fused checks, optional, nullable, option, literal — and calls `run` of any other
- * node (map, andThen, custom, lazy, oneOf, taggedUnion, json, record, refine over a
- * non-primitive) from the generated code, so semantics are identical by construction:
+ * module does the same for the structural subset — struct, array, record, taggedUnion,
+ * primitives with fused checks (regex patterns inline), optional, nullable, option,
+ * literal — and calls `run` of any other node (map, andThen, custom, lazy, oneOf, json,
+ * refine over a non-primitive) from the generated code, so semantics are identical by construction:
  * same messages, same paths, same accumulation order. A property test asserts
  * `compile(d).decode(x)` deep-equals `d.decode(x)` for generated decoders and inputs.
  *
@@ -44,8 +44,10 @@ type Ctx = {
   readonly isFinite: (n: number) => boolean;
   readonly isInteger: (n: number) => boolean;
   readonly checks: Array<(a: never) => boolean>;
+  readonly regexes: Array<RegExp>;
   readonly runs: Array<Run<unknown>>;
   readonly values: Array<unknown>;
+  readonly keys: (o: object) => string[];
 };
 
 type Gen = { src: string[]; ctx: Ctx; tmp: number };
@@ -66,8 +68,14 @@ const emit = (g: Gen, d: Decoder<unknown>, v: string, keyExpr: string, onOk: (va
     g.src.push(`if (${typeTest}) { ${onFail(`ctx.fail(path, ${keyExpr}, ${lit(PRIM_MESSAGE[kind])})`)} }`);
     for (let i = 0; i < prim.checks.length; i++) {
       const c = prim.checks[i] as NonNullable<typeof prim.checks[number]>;
-      const idx = g.ctx.checks.push(c.test) - 1;
-      g.src.push(`else if (!ctx.checks[${idx}](${v})) { ${onFail(`ctx.fail(path, ${keyExpr}, ${lit(c.message)})`)} }`);
+      if (c.regex !== undefined) {
+        const idx = g.ctx.regexes.push(c.regex) - 1;
+        const reset = c.regex.global || c.regex.sticky ? `(ctx.regexes[${idx}].lastIndex = 0, ` : "(";
+        g.src.push(`else if (!${reset}ctx.regexes[${idx}].test(${v}))) { ${onFail(`ctx.fail(path, ${keyExpr}, ${lit(c.message)})`)} }`);
+      } else {
+        const idx = g.ctx.checks.push(c.test) - 1;
+        g.src.push(`else if (!ctx.checks[${idx}](${v})) { ${onFail(`ctx.fail(path, ${keyExpr}, ${lit(c.message)})`)} }`);
+      }
     }
     g.src.push(`else { ${onOk(v)} }`);
     return;
@@ -121,6 +129,40 @@ const emit = (g: Gen, d: Decoder<unknown>, v: string, keyExpr: string, onOk: (va
       g.src.push("}");
       return;
     }
+    case "record": {
+      const o = fresh(g, "o");
+      const out = fresh(g, "m");
+      const iss = fresh(g, "iss");
+      const ks = fresh(g, "ks");
+      const i = fresh(g, "i");
+      const k = fresh(g, "k");
+      const el = fresh(g, "e");
+      g.src.push(`if (typeof ${v} !== "object" || ${v} === null || Array.isArray(${v})) { ${onFail(`ctx.fail(path, ${keyExpr}, "expected object")`)} } else {`);
+      g.src.push(`var ${o} = ${v}; if (${keyExpr} !== undefined) path.push(${keyExpr});`);
+      g.src.push(`var ${out} = {}; var ${iss} = undefined; var ${ks} = ctx.keys(${o});`);
+      g.src.push(`for (var ${i} = 0; ${i} < ${ks}.length; ${i}++) { var ${k} = ${ks}[${i}]; var ${el} = ${o}[${k}];`);
+      emit(g, node.value, el, k, (val) => `ctx.defineOwn(${out}, ${k}, ${val});`, (f) => `${iss} = ctx.merge(${iss}, ${f});`);
+      g.src.push("}");
+      g.src.push(`if (${keyExpr} !== undefined) path.pop();`);
+      g.src.push(`if (${iss} === undefined) { ${onOk(out)} } else { ${onFail(`ctx.failWith(${iss})`)} }`);
+      g.src.push("}");
+      return;
+    }
+    case "taggedUnion": {
+      const tag = fresh(g, "t");
+      g.src.push(`if (typeof ${v} !== "object" || ${v} === null) { ${onFail(`ctx.fail(path, ${keyExpr}, "expected object")`)} } else {`);
+      g.src.push(`var ${tag} = ${v}[${lit(node.discriminant)}];`);
+      const names = Object.keys(node.variants);
+      names.forEach((name, i) => {
+        g.src.push(`${i === 0 ? "if" : "else if"} (${tag} === ${lit(name)}) {`);
+        emit(g, node.variants[name] as Decoder<unknown>, v, keyExpr, onOk, onFail);
+        g.src.push("}");
+      });
+      // Unknown or non-string tag: the issue sits at [...path, key, discriminant], exactly as the interpreter reports it.
+      g.src.push(`${names.length === 0 ? "" : "else "}{ if (${keyExpr} !== undefined) path.push(${keyExpr}); var f = ctx.fail(path, ${lit(node.discriminant)}, ${lit(node.expected)}); if (${keyExpr} !== undefined) path.pop(); ${onFail("f")} }`);
+      g.src.push("}");
+      return;
+    }
     case "struct": {
       const o = fresh(g, "o");
       const out = fresh(g, "s");
@@ -167,7 +209,8 @@ export const compile = <A>(decoder: Decoder<A>): Decoder<A> => {
     some, none,
     isFinite: Number.isFinite,
     isInteger: Number.isInteger,
-    checks: [], runs: [], values: [],
+    checks: [], regexes: [], runs: [], values: [],
+    keys: Object.keys,
   };
   const g: Gen = { src: [], ctx, tmp: 0 };
   g.src.push("var result;");

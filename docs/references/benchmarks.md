@@ -48,6 +48,8 @@ Recorded 2026-10-06 after the decoder protocol rewrite and `D.compile` (decision
 
 Reading: the interpreter is 20–35% faster than Zod and Valibot and the fastest interpreter when input is partly invalid. Compiled two-track is within 1.4x of ArkType on valid input on Node and within 8% on Bun, 4x faster than ArkType when 10% of the input is invalid (its issue objects are cheap), and at parity on the JSON-text path, where `JSON.parse` dominates. The previous recording (2026-10-05, before the rewrite): interpreter 855 ns on Node, 3.7x behind ArkType.
 
+Follow-up, 2026-10-06 (same day, later): with `taggedUnion`/`record` compiled natively and `pattern` regexes tested inline, two back-to-back runs on a loaded machine gave interpreter 780–801 ns, compiled 320 ns, ArkType 231–237 ns — compiled/ArkType 1.35–1.38x (was 1.40x). Absolute numbers drift with machine load; the within-run ratio is the comparable figure.
+
 ## Decoder floor and A/B (`node _ab.ts`-style interleaved runs, 2026-10-06)
 
 Same-process, interleaved, best of 9 over 200k objects; this is the measurement that decided decision 0014.
