@@ -40,6 +40,7 @@ two-track-check: 14 file(s), 2 error(s), 1 review item(s), 0 allowed (config: tw
 | `no-class` | error | class declarations/expressions | plain objects + functions |
 | `no-any` / `no-non-null` / `no-ts-suppress` | error | `any`, `!`, `@ts-ignore`/`@ts-expect-error` (tests exempt from suppress) | precise types; decode; fix the error |
 | `no-console` | error | `console.*` outside infra/, lib/, root | a Logger port at the edge |
+| `no-process-env` | error | `process.env` outside the `root` layer (and tests) | decode configuration once in `main.ts` with `D.struct`; pass a typed `Config` down |
 | `no-platform-calls` | error | `Date.now()`, `new Date()`, `Math.random()`, `randomUUID()`, `setTimeout`/`setInterval`, `fetch` outside infra/, lib/, root, tests | capabilities on `deps` |
 | `layer-domain-imports` | error | domain/ importing anything but `allowedDomainImports` or itself | move the piece or invert the dependency |
 | `layer-workflows-imports` | error | workflows/ importing infra/, `node:*`, or any bare module but `two-track` | ports on the deps record |
@@ -77,7 +78,7 @@ Entries are paths relative to the project directory; a pattern with `*`/`**` is 
 
 ## Suppressing a finding
 
-```ts
+```text
 // two-track-check-allow no-try JSON.parse is the one interop edge of this module
 try { ... } catch { ... }
 ```

@@ -4,7 +4,7 @@
 
 ## What this repository is
 
-- A library: `src/` is the whole product, ~900 lines, no runtime dependencies, runs in any ES2023 engine.
+- A library: `src/` is the whole product, ~2,100 lines across 14 modules, no runtime dependencies, runs in any ES2023 engine.
 - The fastest expression of `Result`/`Option`/decoders/exhaustive match/async railway that JavaScript engines can run. Speed is a tested invariant (`pnpm bench:check`).
 - The reference implementation behind the `two-track-fp-skill` coding-agent skill. Changes here change what that skill teaches.
 

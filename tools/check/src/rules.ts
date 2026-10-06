@@ -266,6 +266,11 @@ const checkNode = (ctx: Ctx, node: ts.Node): void => {
     }
   }
 
+  // Configuration is decoded ONCE in the composition root; `process.env` anywhere else is an undecoded boundary.
+  if (ts.isPropertyAccessExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "process" && node.name.text === "env" && !inLayer(ctx, "root") && !ctx.isTest) {
+    report(ctx, node, "no-process-env", "error", "`process.env` outside the composition root", "decode configuration once in main.ts with D.struct and pass a typed Config down; nothing else reads the environment");
+  }
+
   if (ts.isNewExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "Date" && (node.arguments === undefined || node.arguments.length === 0) && !inLayer(ctx, "infra", "lib", "root") && !ctx.isTest) {
     report(ctx, node, "no-platform-calls", "error", "`new Date()` outside infra/", "take a Cap.Clock capability and construct from deps.clock.now()");
   }

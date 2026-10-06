@@ -13,7 +13,7 @@
 [![Harness](https://img.shields.io/badge/repo-agent--first-d97757)](#harness-engineering-how-this-repository-is-organized)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
 
-`two-track` is a ~900-line TypeScript library that gives you Scott Wlaschin's [two-track model](https://fsharpforfunandprofit.com/rop/) — `Result`, `Option`, parse-don't-validate decoders, exhaustive matching, an async railway with bounded concurrency, retry and timeouts, and injectable capabilities — with **no runtime dependencies** and **no runtime**. Every abstraction lives in the type checker and vanishes at build time. The measured cost of the railway is about 12 nanoseconds per three-step pipeline, which is the cost of three small object allocations and nothing else.
+`two-track` is a ~2,100-line TypeScript library that gives you Scott Wlaschin's [two-track model](https://fsharpforfunandprofit.com/rop/) — `Result`, `Option`, parse-don't-validate decoders, exhaustive matching, an async railway with bounded concurrency, retry and timeouts, and injectable capabilities — with **no runtime dependencies** and **no runtime**. Every abstraction lives in the type checker and vanishes at build time. The measured cost of the railway is about 12 nanoseconds per three-step pipeline, which is the cost of three small object allocations and nothing else.
 
 It is the third member of a family of opinionated functional-programming skills for coding agents:
 
@@ -420,6 +420,23 @@ src/domain/order.ts:3:1: [layer-domain-imports] domain imports "pg" — fix: dom
 ```
 
 The type-aware must-use family — `ignored-result`, `floating-async-result`, `ignored-result-in-callback`, `floating-async-callback` — is the point of the package: it is TypeScript's missing `#[must_use]`, and it covers the cases a grep never could, such as a Result returned from a `forEach` callback or an array of Results produced by `map` and never read. Banned constructs, layer direction, brand forging, bare `Promise.all`, `fetch` without a signal, and `default:` without `assertNever` round it out, and `R.unwrapOr` / `D.unknown` are reported at `review` severity for a human to confirm. Suppressions require a reason and are counted. See the package README for usage, config and the full rule table.
+
+## Public surface
+
+Everything the package exports, so nothing is discoverable only by reading `dist/`. Namespaces are plain module objects; top-level names are the ones written constantly.
+
+| Where | Exports |
+|---|---|
+| top level | `ok`, `err`, `unit`, `some`, `none`, `match`, `matchBy`, `assertNever`, `tagged`, `hasTag`, `pipe`, `identity`, `constant`; types `Result`, `Ok`, `Err`, `OkOf`, `ErrOf`, `NonEmptyArray`, `Option`, `Some`, `None`, `Brand`, `Unbrand`, `Tagged`, `TagOf`, `Cases`, `CasesBy`, `Decoder`, `DecodeError`, `DecodeIssue`, `Infer`, `StructOf`, `PathSegment`, `AsyncResult`, `ConcurrencyOptions`, `RetryPolicy`, `BackoffOptions`, `Clock`, `Sleeper`, `Random`, `IdGen` |
+| `R` | `isOk`, `isErr`, `map`, `mapErr`, `mapBoth`, `andThen`, `orElse`, `match`, `unwrapOr`, `unwrapOrElse`, `tap`, `tapErr`, `flatten`, `swap`, `all`, `traverse`, `validateAll`, `partition`, `fromThrowable`, `fromPredicate`, `fromNullable` |
+| `O` | `isSome`, `isNone`, `map`, `andThen`, `orElse`, `filter`, `match`, `unwrapOr`, `unwrapOrElse`, `fromNullable`, `toNullable`, `toUndefined`, `toResult`, `all`, `find` |
+| `D` | primitives `unknown`, `string`, `number`, `integer`, `boolean`, `literal`, `custom`; refinements `refine`, `map`, `andThen`, `brand`, `pattern`, `nonEmptyString`, `trimmed`, `minLength`, `maxLength`, `min`, `max`; dates `isoDate` (strict), `dateFromString` (permissive); containers `nullable`, `option`, `optional`, `array`, `nonEmptyArray`, `record`, `struct`, `taggedUnion`, `oneOf`, `json`, `lazy`; `formatIssues`; `compile` |
+| `Async` | `fromPromise`, `tryPromise`, `map`, `mapErr`, `andThen`, `orElse`, `match`, `tap`, `tapErr`, `all`, `mapConcurrent`, `validateConcurrent`, `retry`, `backoff`, `withTimeout`; `Aborted` |
+| `Cap` | `systemClock`, `systemSleeper`, `systemRandom`, `systemIdGen`; deterministic `controlledClock`, `instantSleeper`, `manualSleeper`, `seededRandom`, `sequentialIds` |
+| `Lane` | `switchLane`, `exhaustLane`, `queueLane`, `debounce`, `throttle`, `semaphore`; `Superseded`, `Busy`, `QueueFull` |
+| `two-track/testing` | `arbResult`, `arbOption`, `arbDecoded`, `functorLaws`, `monadLaws`, `decoderRoundTrip`, `decoderNeverThrows`, `decoderDoesNotMutate`, `structuralEq`; types `FastCheckLike`, `Arb`, `Eq` |
+
+Every module is also a subpath (`two-track/result`, `two-track/decode`, …) for selective bundling.
 
 ## Conventions
 

@@ -29,6 +29,10 @@ Rule families: banned constructs (`no-throw`, `no-try`, `no-catch`, `no-generato
 
 Project loading fails on all parsed tsconfig diagnostics instead of reporting an empty or invalid project as clean. Mixed tuples inspect every element for Results. Suppression directives and allowances are read only from TypeScript comment ranges; strings cannot hide findings or generate false suppression findings. Config arrays cannot masquerade as layer objects, and invalid CLI arguments produce usage errors. Direct decoder and Result subpath imports retain review diagnostics. These behaviors have fixture, configuration, project-loading and CLI tests.
 
+## Amendment (2026-10-06, alignment sweep)
+
+`no-process-env`: `process.env` outside the `root` layer is an undecoded boundary (configuration is decoded once in the composition root). The skill's boundaries reference had asserted this was enforced before any rule existed; the sweep that compares the skill's claims against the checker's rule list caught it.
+
 ## Consequences
 
 - Apps add `two-track-check` as a devDependency and run it in `lint`/CI (skill `scaffold.md`); the skill's `code-review.md` runs it first and keeps the greps as the fallback.

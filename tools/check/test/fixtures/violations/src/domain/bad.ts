@@ -84,6 +84,8 @@ export const valuesNotCalls = (s: string): void => {
 export const monotonic = (): number => performance.now(); // expect: no-platform-calls
 export const entropy = (): Uint8Array => crypto.getRandomValues(new Uint8Array(4)); // expect: no-platform-calls
 
+export const dbUrl = process.env["DATABASE_URL"]; // expect: no-process-env
+
 export const hatch = D.unknown; // expect: review-decode-unknown
 export const fallback = (r: Result<string, number>): number => R.unwrapOr(r, 0); // expect: review-unwrap-or
 export const fallbackO = (o: O.Option<number>): number => O.unwrapOr(o, 0); // expect: review-unwrap-or
